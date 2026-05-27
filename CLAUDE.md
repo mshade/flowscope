@@ -54,7 +54,7 @@ workflow.yml → parser.py → WorkflowPermissions
 
 Rules 1 and 2 return early — there's nothing meaningful to say about job scoping when the workflow is already maximally permissioned. Rule 4 is blind when `raw_doc=None` (no step data available). `AGENTIC_ACTIONS` in `policy.py` is the registry of known agentic action names (currently `anthropics/claude-code-action`).
 
-**Exception suppression**: `evaluate_policy` accepts an `exceptions` list (dicts with `scope`, `status`, `expires_at`). An active, non-expired exception for a given scope suppresses its violation. Expired or inactive exceptions are ignored.
+**Exception suppression**: `evaluate_policy` accepts an `exceptions` list (dicts with `scope`, `expires_at`, and optional `workflow`). An active exception must not be expired; a `workflow` field scopes it to a specific workflow file; omitting `workflow` makes it a repo-wide grant.
 
 **`analyzer.py`** loads the YAML once, passes the raw doc to both the parser and the policy evaluator, and returns a `CheckResult`. The `passed` field is `False` if any `HARD_BLOCK` violation exists.
 

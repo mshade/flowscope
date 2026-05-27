@@ -22,7 +22,7 @@ def _is_exception_active(exc: dict[str, Any]) -> bool:
     return expires >= date.today()
 
 
-def _scope_is_excepted(scope: str, exceptions: list[dict], workflow_path: str = "") -> bool:
+def _scope_is_excepted(scope: str, exceptions: list[dict], workflow_path: str) -> bool:
     return any(
         exc.get("scope") == scope
         and _is_exception_active(exc)
