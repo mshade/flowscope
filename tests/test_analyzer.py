@@ -59,6 +59,15 @@ def test_result_serializes_to_json():
     assert output["passed"] is False
 
 
+def test_agentic_step_requires_review_fails_check():
+    # agentic_scoped.yml: job-level permissions (no Rule 3), agentic action, no baseline
+    # → only violation should be REQUIRES_REVIEW
+    result = analyze_workflow(FIXTURES / "agentic_scoped.yml")
+    assert result.passed is False
+    assert result.requires_review()
+    assert not result.has_hard_block()
+
+
 def test_workflow_path_preserved_in_result():
     fixture_path = FIXTURES / "clean_minimal.yml"
     result = analyze_workflow(fixture_path)

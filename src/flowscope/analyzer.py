@@ -3,7 +3,7 @@ from typing import Any, Optional
 
 from ruamel.yaml import YAML
 
-from .models import CheckResult
+from .models import CheckResult, ViolationTier
 from .parser import parse_workflow
 from .policy import evaluate_policy
 
@@ -27,7 +27,7 @@ def analyze_workflow(
         exceptions=exceptions,
     )
 
-    passed = not any(v.tier.value == "hard_block" for v in violations)
+    passed = not any(v.tier in (ViolationTier.HARD_BLOCK, ViolationTier.REQUIRES_REVIEW) for v in violations)
 
     return CheckResult(
         workflow_path=str(workflow_path),

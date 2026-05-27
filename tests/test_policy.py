@@ -53,15 +53,17 @@ def test_workflow_level_write_with_all_jobs_scoped_no_hard_block():
     assert not any(v.tier == ViolationTier.HARD_BLOCK for v in violations)
 
 
-# ── Agentic step warnings ─────────────────────────────────────────────────────
+# ── Requires-review rules ─────────────────────────────────────────────────────
 
-def test_agentic_step_with_write_scope_and_no_baseline_is_warning():
-    from ruamel.yaml import YAML as _YAML  # ruamel.yaml is available (used by parser)
+def test_agentic_step_with_write_scope_and_no_baseline_requires_review():
+    from ruamel.yaml import YAML as _YAML
     _yaml = _YAML()
     with open(FIXTURES / "agentic_step.yml") as fh:
         raw = _yaml.load(fh)
     perms = parse_workflow(FIXTURES / "agentic_step.yml")
     violations = evaluate_policy(perms, "agentic_step.yml", raw_doc=raw, observed_baseline=None)
+    tiers = [v.tier for v in violations]
+    assert ViolationTier.REQUIRES_REVIEW in tiers
     messages = [v.message for v in violations]
     assert any("agentic" in m.lower() for m in messages)
 

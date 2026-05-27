@@ -166,7 +166,7 @@ def evaluate_policy(
         if has_write and observed_baseline is None:
             violations.append(
                 Violation(
-                    tier=ViolationTier.WARNING,
+                    tier=ViolationTier.REQUIRES_REVIEW,
                     file_path=workflow_path,
                     line=None,
                     scope=None,
@@ -178,9 +178,9 @@ def evaluate_policy(
                         "has a higher blast radius."
                     ),
                     remediation=(
-                        "Instrument the runner with the flowscope post-job hook to "
-                        "establish an observed baseline, or manually justify each "
-                        "write scope with an inline comment."
+                        "Have a security or platform team member review and approve "
+                        "this PR, or instrument the runner with the flowscope "
+                        "post-job hook to establish an observed baseline."
                     ),
                 )
             )

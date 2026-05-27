@@ -12,6 +12,7 @@ class AccessLevel(str, Enum):
 
 class ViolationTier(str, Enum):
     HARD_BLOCK = "hard_block"
+    REQUIRES_REVIEW = "requires_review"
     WARNING = "warning"
     ADVISORY = "advisory"
 
@@ -50,3 +51,6 @@ class CheckResult:
 
     def has_hard_block(self) -> bool:
         return any(v.tier == ViolationTier.HARD_BLOCK for v in self.violations)
+
+    def requires_review(self) -> bool:
+        return any(v.tier == ViolationTier.REQUIRES_REVIEW for v in self.violations)

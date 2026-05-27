@@ -11,9 +11,11 @@ Flowscope is the enforcement plane of a larger [Workflow Permission Governance S
 | `permissions: write-all` | Hard block | Fails the check |
 | `permissions: {}` (implicit full access) | Hard block | Fails the check |
 | Workflow-level write scope with any unscoped job | Hard block | Fails the check |
-| Agentic action (e.g. `claude-code-action`) with write scope and no observed baseline | Warning | Annotates, does not fail |
+| Agentic action (e.g. `claude-code-action`) with write scope and no observed baseline | Requires review | Fails the check; cleared by human approval |
 
-**Hard block** means the check fails and is intended to block merge when configured as a required check. **Warning** surfaces in annotations but does not block.
+**Hard block** is resolved by fixing the workflow or registering a formal exception. **Requires review** is resolved by explicit sign-off from a security or platform team reviewer — no code change or exception entry required, just a conscious human acknowledgment of the risk. This distinction matters for agentic workloads where the right answer is often "yes, this needs write access" but someone should verify that before it merges.
+
+**Hard block** and **requires review** both fail the check. **Warning** surfaces in annotations but does not block.
 
 A job is considered "scoped" when it has an explicit `permissions:` block. A workflow-level write scope is only acceptable when every job declares its own permissions block — otherwise that write scope silently applies to jobs that may not need it.
 
