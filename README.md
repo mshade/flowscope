@@ -15,7 +15,7 @@ Flowscope is the enforcement plane of a larger [Workflow Permission Governance S
 
 **Hard block** is resolved by fixing the workflow or registering a formal exception. **Requires review** is resolved by explicit sign-off from a security or platform team reviewer — no code change or exception entry required, just a conscious human acknowledgment of the risk. This distinction matters for agentic workloads where the right answer is often "yes, this needs write access" but someone should verify that before it merges.
 
-**Hard block** and **requires review** both fail the check. **Warning** surfaces in annotations but does not block.
+**Hard block** and **requires review** both fail the check. **Warning** is a defined tier reserved for non-blocking advisories (e.g. write scopes that exceed observed runtime usage); no rule currently emits at this level — it's wired in for when the observation plane provides baseline data.
 
 A job is considered "scoped" when it has an explicit `permissions:` block. A workflow-level write scope is only acceptable when every job declares its own permissions block — otherwise that write scope silently applies to jobs that may not need it.
 
@@ -24,6 +24,8 @@ A job is considered "scoped" when it has an explicit `permissions:` block. A wor
 ## Deploying org-wide
 
 The most effective deployment is as a [required workflow](https://docs.github.com/en/actions/sharing-automations/required-workflows) at the org level. Every repo in the org gets coverage automatically — no per-repo setup, no opt-out.
+
+Flowscope assumes three platform-level controls are in place (see [Deployment Assumptions](docs/architecture.md#deployment-assumptions) in the architecture doc): self-hosted runners for token-level audit, org-mandated required workflows so coverage cannot be bypassed, and org-level CODEOWNERS routing workflow changes to the right reviewers. The steps below configure those controls and the flowscope-specific pieces around them.
 
 ### Step 1 — Create the required workflow
 
@@ -73,7 +75,7 @@ jobs:
 
 Then configure it as a required workflow in **Organization Settings → Actions → Required workflows**.
 
-### Step 1b — Restrict which actions developers can use
+### Step 2 — Restrict which actions developers can use
 
 Flowscope gates permissions on workflows that exist, but it cannot prevent a developer from adding a malicious or unvetted action before the PR is reviewed. GitHub's **Actions allowlist** closes this gap.
 
@@ -102,10 +104,10 @@ The allowlist is enforced by the GitHub Actions runner before any workflow code 
 |---------|-----------------|
 | Actions allowlist | Arbitrary third-party code executing in your runners |
 | flowscope | Excessive token scope on approved workflows |
-| CODEOWNERS on exceptions file | Self-approved permission escalation |
+| CODEOWNERS routing (workflow files + exceptions file) | Unreviewed workflow changes; self-approved permission escalation |
 | Self-hosted runners | Opaque runtime; enables full token audit and observation plane |
 
-### Step 2 — Migrate to self-hosted runners for full auditability
+### Step 3 — Migrate to self-hosted runners for full auditability
 
 GitHub-hosted runners are ephemeral and opaque — you can see what a workflow declared, but not what its token actually called at runtime. Self-hosted runners give you control over the execution environment and a path to complete audit coverage.
 
@@ -127,20 +129,28 @@ Forcing self-hosted runners everywhere at once breaks existing workflows. Use ru
 
 Self-hosted runners are the prerequisite for the observation plane — without them, runtime baseline data cannot be collected centrally.
 
-### Step 4 — Protect the exceptions file with CODEOWNERS
+### Step 4 — Route workflow and exception changes through CODEOWNERS
 
-In each consuming repo (or via a default CODEOWNERS in the `.github` repo), require security team review on the exceptions file:
+CODEOWNERS provides the human audit layer on top of flowscope's static analysis. Configure it at the org level (via the `.github` repo) to route two different kinds of changes to the right reviewers:
 
 ```
 # .github/CODEOWNERS
-.github/flowscope-exceptions.json @your-org/security-team
+
+# Any workflow change goes to the platform team for general audit;
+# this is the layer that catches what static analysis can't reason about
+# (run: step bodies, novel actions, suspicious patterns).
+.github/workflows/**          @your-org/platform-team
+
+# Exception entries are an explicit security-team decision.
+.github/flowscope-exceptions.json   @your-org/security-team
 ```
 
 Combined with a [branch protection rule](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches) requiring CODEOWNERS review, this means:
 
-- Developers cannot self-approve an exception
-- Merging an exception entry = security team has explicitly signed off
-- The git history of the exceptions file is a full audit trail
+- Every workflow change has a human reviewer beyond the original author
+- Routing can be risk-tiered: workflows that introduce agentic actions can be routed to the security team via more specific CODEOWNERS patterns
+- Exception entries cannot be self-approved; the security team is the gate
+- Git history of both surfaces is a full audit trail
 
 ### Step 5 — Enable automatic exception PRs
 
