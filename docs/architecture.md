@@ -16,7 +16,18 @@ Flowscope is designed around three platform-level controls that must be in place
 
 **Org-mandated required workflows.** Flowscope is deployed as a GitHub [required workflow](https://docs.github.com/en/actions/sharing-automations/required-workflows) at the org level, scoped to `.github/workflows/**` path changes. Coverage is automatic across every repo in the org — no per-repo opt-in, and no way for a developer to remove the gate from their own repo. The check fires on every PR that touches a workflow file, before merge.
 
-**Org-level CODEOWNERS on workflow files.** An entry in the org's central `.github` repo routes workflow file changes to the right reviewers — not just the exceptions file, but the workflows themselves. This provides a human audit layer on top of static analysis, and can be risk-tiered: changes that introduce agentic actions route to the security team; general CI changes route to the platform team. This can be combined with automated review tooling (e.g. a bot that flags specific patterns) to scale the security team's attention to where it matters most.
+**Org-level CODEOWNERS controlling the workflow surface.** An entry in the org's central `.github` repo routes changes to the right reviewers and provides the human audit layer on top of static analysis. The specific paths under CODEOWNERS control are:
+
+| Path | Reviewer | Why |
+|------|----------|-----|
+| `.github/CODEOWNERS` | platform + security | Routing itself must not be self-modifiable |
+| `.github/workflows/**` | platform team | General audit on every workflow change |
+| `.github/actions/**`, `action.yml`, `action.yaml` | platform team | Composite/local actions execute in the same trust context as workflows |
+| `.github/workflows/*deploy*.yml`, `*release*.yml` | security team | Most powerful tokens; escalate via specific patterns (last match wins) |
+| `.github/workflows/*claude*.yml`, `*agent*.yml`, `*ai*.yml` | security team | Highest-risk category — always security review |
+| `.github/flowscope-exceptions.json` | security team | Permission exceptions are explicit security-team decisions |
+
+Routing is risk-tiered through pattern specificity. The general `.github/workflows/**` line covers any workflow change; more specific patterns override it for higher-risk categories. This can be combined with automated review tooling to scale security team attention to where it matters most.
 
 ---
 
