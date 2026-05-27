@@ -1,0 +1,36 @@
+name: hubflow-static-analysis-gate
+description: >
+  Analyzes GitHub Actions workflow files for permission scope violations.
+  Hard-blocks write-all, implicit full access, and unscoped workflow-level writes.
+  Warns on agentic steps with write scope and no observed baseline.
+
+inputs:
+  workflow_file:
+    description: Path to the workflow YAML file to analyze
+    required: true
+  baseline_file:
+    description: Path to JSON file with observed usage baseline (from observation plane)
+    required: false
+    default: ""
+  exceptions_file:
+    description: Path to JSON file with registered scope exceptions
+    required: false
+    default: ""
+
+outputs:
+  result:
+    description: Full JSON check result (workflow_path, passed, violations[])
+
+runs:
+  using: composite
+  steps:
+    - name: Install hubflow
+      shell: bash
+      run: pip install -e "${{ github.action_path }}" --quiet
+    - name: Run static analysis gate
+      shell: bash
+      env:
+        INPUT_WORKFLOW_FILE: ${{ inputs.workflow_file }}
+        INPUT_BASELINE_FILE: ${{ inputs.baseline_file }}
+        INPUT_EXCEPTIONS_FILE: ${{ inputs.exceptions_file }}
+      run: "${{ github.action_path }}/entrypoint.sh"
