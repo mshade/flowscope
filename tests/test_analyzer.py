@@ -63,3 +63,36 @@ def test_workflow_path_preserved_in_result():
     fixture_path = FIXTURES / "clean_minimal.yml"
     result = analyze_workflow(fixture_path)
     assert str(fixture_path) in result.workflow_path or str(fixture_path.absolute()) == result.workflow_path
+
+
+import subprocess
+import sys
+
+
+def test_cli_exits_1_on_hard_block():
+    result = subprocess.run(
+        [sys.executable, "-m", "hubflow.cli", str(FIXTURES / "write_all.yml")],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+
+
+def test_cli_exits_0_on_clean():
+    result = subprocess.run(
+        [sys.executable, "-m", "hubflow.cli", str(FIXTURES / "clean_minimal.yml")],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+
+
+def test_cli_outputs_json():
+    result = subprocess.run(
+        [sys.executable, "-m", "hubflow.cli", str(FIXTURES / "write_all.yml")],
+        capture_output=True,
+        text=True,
+    )
+    data = json.loads(result.stdout)
+    assert "violations" in data
+    assert "passed" in data
