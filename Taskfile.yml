@@ -56,8 +56,19 @@ tasks:
           done
         else
           # Discover all workflows in the repo
+          GH_ERR=$(mktemp)
           WORKFLOWS=$(gh api "repos/${OWNER_REPO}/contents/.github/workflows" \
-            --jq '.[].name' 2>/dev/null || true)
+            --jq '.[].name' 2>"$GH_ERR") || {
+            GH_EXIT=$?
+            if grep -q "404\|Not Found\|Could not resolve" "$GH_ERR" 2>/dev/null; then
+              echo "Repository not found: ${OWNER_REPO}" >&2
+            else
+              cat "$GH_ERR" >&2
+            fi
+            rm -f "$GH_ERR"
+            exit $GH_EXIT
+          }
+          rm -f "$GH_ERR"
           if [[ -z "$WORKFLOWS" ]]; then
             echo "No workflows found in ${OWNER_REPO}/.github/workflows" >&2
             exit 1
