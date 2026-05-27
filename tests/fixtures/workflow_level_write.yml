@@ -1,0 +1,14 @@
+name: Deploy
+on: [push]
+permissions:
+  contents: write
+  packages: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo deploy
