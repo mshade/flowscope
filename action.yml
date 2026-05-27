@@ -16,6 +16,13 @@ inputs:
     description: Path to JSON file with registered scope exceptions
     required: false
     default: ""
+  create_exception_pr:
+    description: >
+      When true, automatically create a draft PR with an exception skeleton
+      when violations are detected. Requires contents: write and
+      pull-requests: write permissions in the calling workflow.
+    required: false
+    default: "false"
 
 outputs:
   result:
@@ -33,4 +40,5 @@ runs:
         INPUT_WORKFLOW_FILE: ${{ inputs.workflow_file }}
         INPUT_BASELINE_FILE: ${{ inputs.baseline_file }}
         INPUT_EXCEPTIONS_FILE: ${{ inputs.exceptions_file }}
+        INPUT_CREATE_EXCEPTION_PR: ${{ inputs.create_exception_pr }}
       run: "${{ github.action_path }}/entrypoint.sh"
