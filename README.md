@@ -11,11 +11,13 @@ Flowscope is the enforcement plane of a larger [Workflow Permission Governance S
 | `permissions: write-all` | Hard block | Fails the check |
 | `permissions: {}` (implicit full access) | Hard block | Fails the check |
 | Workflow-level write scope with any unscoped job | Hard block | Fails the check |
-| Agentic action (e.g. `claude-code-action`) with write scope and no observed baseline | Requires review | Fails the check; cleared by human approval |
+| Agentic action (e.g. `claude-code-action`) with write scope and no observed baseline | Requires review | Surfaces as an annotation; does not block the check |
 
-**Hard block** is resolved by fixing the workflow or registering a formal exception. **Requires review** is resolved by explicit sign-off from a security or platform team reviewer — no code change or exception entry required, just a conscious human acknowledgment of the risk. This distinction matters for agentic workloads where the right answer is often "yes, this needs write access" but someone should verify that before it merges.
+**Hard block** is resolved by fixing the workflow or registering a formal exception in `.github/flowscope-exceptions.json`.
 
-**Hard block** and **requires review** both fail the check. **Warning** is a defined tier reserved for non-blocking advisories (e.g. write scopes that exceed observed runtime usage); no rule currently emits at this level — it's wired in for when the observation plane provides baseline data.
+**Requires review** is non-blocking by design. Agentic actions with write scope cannot be statically proven safe — the question is whether the action's runtime behavior under that token is acceptable, which requires human judgment. The acknowledgment is recorded **by the PR approval itself**: CODEOWNERS routing on agentic workflow file patterns (e.g. `.github/workflows/*claude*.yml`, `*agent*.yml`) routes these PRs to the security team, and their GitHub PR approval is the persisted, audit-logged record that the review happened. flowscope's job is to flag and annotate; the gate is the PR review process.
+
+**Warning** is a defined tier reserved for non-blocking advisories (e.g. write scopes that exceed observed runtime usage); no rule currently emits at this level — it's wired in for when the observation plane provides baseline data.
 
 A job is considered "scoped" when it has an explicit `permissions:` block. A workflow-level write scope is only acceptable when every job declares its own permissions block — otherwise that write scope silently applies to jobs that may not need it.
 

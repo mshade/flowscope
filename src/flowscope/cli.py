@@ -29,13 +29,19 @@ def _write_step_summary(output: dict, warn_only: bool = False) -> None:
 
     passed = output.get("passed", True)
     violations = output.get("violations", [])
+    has_hard_block = any(v.get("tier") == "hard_block" for v in violations)
+    has_requires_review = any(v.get("tier") == "requires_review" for v in violations)
 
-    if passed:
-        status = "✅ Passed"
-    elif warn_only:
+    if warn_only and violations:
         status = "⚠️ Audit mode — would fail"
-    else:
+    elif has_hard_block:
         status = "❌ Failed"
+    elif has_requires_review:
+        status = "🟠 Review required (non-blocking)"
+    elif passed and not violations:
+        status = "✅ Passed"
+    else:
+        status = "✅ Passed"
 
     with open(summary_path, "a") as f:
         f.write(f"## flowscope — `{wf}`\n\n")
@@ -45,6 +51,12 @@ def _write_step_summary(output: dict, warn_only: bool = False) -> None:
                 f.write(
                     "> ⚠️ **Audit mode** (`--warn-only`): these violations would block "
                     "the check under full enforcement. No action required now.\n\n"
+                )
+            elif has_requires_review and not has_hard_block:
+                f.write(
+                    "> 🟠 **Review required** — the check is non-blocking, but this PR "
+                    "should be reviewed by a CODEOWNER on the agentic workflow file "
+                    "patterns. The PR approval is the recorded human acknowledgment.\n\n"
                 )
             f.write("| Tier | Message | Remediation |\n")
             f.write("|------|---------|-------------|\n")

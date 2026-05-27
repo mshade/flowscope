@@ -27,8 +27,11 @@ def analyze_workflow(
         exceptions=exceptions,
     )
 
-    blocking = (ViolationTier.HARD_BLOCK, ViolationTier.REQUIRES_REVIEW)
-    passed = not any(v.tier in blocking for v in violations)
+    # Only HARD_BLOCK fails the check. REQUIRES_REVIEW surfaces as an annotation
+    # but does not gate merge — the human acknowledgment is recorded by the
+    # CODEOWNERS-routed PR approval on agentic workflow file patterns. The
+    # security team approving the PR is the persisted record of the review.
+    passed = not any(v.tier == ViolationTier.HARD_BLOCK for v in violations)
 
     return CheckResult(
         workflow_path=str(workflow_path),

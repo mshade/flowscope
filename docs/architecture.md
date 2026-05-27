@@ -85,7 +85,7 @@ flowchart LR
 
 **`policy.py`** evaluates four rules in order and returns a flat `list[Violation]`. Each violation carries a tier, the affected scope, file path, line number, and a remediation hint.
 
-**`analyzer.py`** is the thin coordinator: loads YAML once, passes the raw document to both parser and policy evaluator, assembles `CheckResult`. The `passed` field is `False` if any `HARD_BLOCK` or `REQUIRES_REVIEW` violation is present.
+**`analyzer.py`** is the thin coordinator: loads YAML once, passes the raw document to both parser and policy evaluator, assembles `CheckResult`. The `passed` field is `False` only if any `HARD_BLOCK` violation is present — `REQUIRES_REVIEW` surfaces in annotations but does not gate merge, because the recorded human acknowledgment lives in the PR approval log rather than in a separate exception file.
 
 **`cli.py`** serializes `CheckResult` to JSON on stdout and exits with code 0 (pass) or 1 (fail). The GitHub Action captures this output before propagating the exit code so `$GITHUB_OUTPUT` is always written even when violations are found.
 
@@ -100,11 +100,11 @@ The four rules are evaluated in order. Rules 1 and 2 return immediately — ther
 | 1 | `permissions: write-all` | `HARD_BLOCK` | Returns immediately |
 | 2 | `permissions: {}` (implicit full access) | `HARD_BLOCK` | Equivalent to write-all on GHA; returns immediately |
 | 3 | Workflow-level write scope + any unscoped job | `HARD_BLOCK` | Job-level override required for each job |
-| 4 | Agentic action + write scope + no observed baseline | `REQUIRES_REVIEW` | Registry-driven; new actions added to `AGENTIC_ACTIONS` in `policy.py` |
+| 4 | Agentic action + write scope + no observed baseline | `REQUIRES_REVIEW` | Non-blocking; flagged for CODEOWNERS-routed human review |
 
 **Violation tiers:**
 - `HARD_BLOCK` — fails the check; resolved by fixing the workflow or registering a formal exception
-- `REQUIRES_REVIEW` — fails the check; resolved by human sign-off (no code change required)
+- `REQUIRES_REVIEW` — does **not** fail the check; surfaces as an annotation. The recorded human acknowledgment is the CODEOWNERS-gated PR approval on agentic workflow file patterns. Code cannot statically prove an agentic action with write scope is safe; the right gate is a human reviewer of the PR, not a separate exception file.
 - `WARNING` — defined, not yet emitted; does not fail the check
 - `ADVISORY` — planned; write scopes with no inline justification comment
 
@@ -163,7 +163,7 @@ No `status` field. CODEOWNERS-gated merge is the approval gate; expiry handles t
 
 **Deterministic branch names.** `flowscope/exception-<stem>` reduces idempotency to a branch-existence check (`git ls-remote --exit-code`). No PR search, no state file, no race condition.
 
-**`REQUIRES_REVIEW` tier.** Agentic actions with write scope cannot be statically proven safe — the question is whether the action's behavior under that token is acceptable, which requires human judgment. A `HARD_BLOCK` would demand a code fix that may not exist; a `WARNING` would let it pass silently. `REQUIRES_REVIEW` names the right gate: human sign-off.
+**`REQUIRES_REVIEW` tier — non-blocking by design.** Agentic actions with write scope cannot be statically proven safe — the question is whether the action's behavior under that token is acceptable, which requires human judgment. A `HARD_BLOCK` would demand a code fix that may not exist; a `WARNING` would let it pass silently. `REQUIRES_REVIEW` sits between them: the check stays green (so it isn't bypassed via an exception entry that bundles it with HARD_BLOCK semantics) but emits a visible annotation. The actual gate is the CODEOWNERS routing on agentic workflow file patterns — the security team's PR approval is the recorded, audit-logged acknowledgment. No separate file, no second source of truth.
 
 **`ruamel.yaml` over PyYAML.** Comment-preserving parse tree retained for planned advisory rules: write scopes with no inline justification comment will emit an `ADVISORY` violation. PyYAML discards comments; switching later would require re-parsing all documents.
 

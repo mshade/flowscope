@@ -65,11 +65,13 @@ def test_result_serializes_to_json():
     assert output["passed"] is False
 
 
-def test_agentic_step_requires_review_fails_check():
+def test_agentic_step_requires_review_does_not_fail_check():
     # agentic_scoped.yml: job-level permissions (no Rule 3), agentic action, no baseline
-    # → only violation should be REQUIRES_REVIEW
+    # → only violation should be REQUIRES_REVIEW, which surfaces but does NOT block.
+    # The PR-level CODEOWNERS approval on agentic workflow file patterns is the
+    # recorded human acknowledgment; flowscope's job is to flag, not gate.
     result = analyze_workflow(FIXTURES / "agentic_scoped.yml")
-    assert result.passed is False
+    assert result.passed is True
     assert result.requires_review()
     assert not result.has_hard_block()
 
