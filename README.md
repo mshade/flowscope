@@ -2,7 +2,7 @@
 
 Static analysis gate for GitHub Actions workflow permission scopes. Catches over-permissioned workflows at PR time, not after an incident.
 
-Flowscope is the enforcement plane of a larger [Workflow Permission Governance System](#background). It parses declared permission scopes in workflow YAML, evaluates them against a tiered violation policy, and emits structured check results. It runs as a GitHub Action and can be wired into a required org-level workflow so coverage is automatic across every repo.
+Flowscope is the enforcement plane of a larger [Workflow Permission Governance System](docs/architecture.md). It parses declared permission scopes, evaluates them against a tiered policy, and emits structured check results. Deployed as a GitHub Action — typically as an org-level required workflow so coverage is automatic across every repo.
 
 ## What it catches
 
@@ -11,39 +11,35 @@ Flowscope is the enforcement plane of a larger [Workflow Permission Governance S
 | `permissions: write-all` | Hard block | Fails the check |
 | `permissions: {}` (implicit full access) | Hard block | Fails the check |
 | Workflow-level write scope with any unscoped job | Hard block | Fails the check |
-| `pull_request_target` trigger + any write scope | Hard block | Fails the check (canonical fork-PR-poisoning vector) |
-| `workflow_run` trigger + any write scope | Requires review | Surfaces as an annotation; does not block |
-| Agentic action (e.g. `claude-code-action`) with write scope and no observed baseline | Requires review | Surfaces as an annotation; does not block the check |
-| High-risk scope write (`actions`, `id-token`, `packages`, `attestations`) without inline justification | Advisory | Soft notice; does not block. Suppressed by `# flowscope:reason: <why>` on the scope line |
+| `pull_request_target` trigger + any write scope | Hard block | Fails the check (fork-PR-poisoning vector) |
+| Agentic action (e.g. `claude-code-action`) with write scope and no observed baseline | Requires review | Non-blocking annotation |
+| `workflow_run` trigger + any write scope | Requires review | Non-blocking annotation |
+| High-risk scope (`actions`, `id-token`, `packages`, `attestations`) without inline justification | Advisory | Soft notice; suppressed by `# flowscope:reason: <why>` on the scope line |
 
-**Hard block** is resolved by fixing the workflow or registering a formal exception in `.github/flowscope-exceptions.json`.
+**Tier resolution paths:**
 
-**Requires review** is non-blocking by design. Agentic actions with write scope cannot be statically proven safe — the question is whether the action's runtime behavior under that token is acceptable, which requires human judgment. The acknowledgment is recorded **by the PR approval itself**: CODEOWNERS routing on agentic workflow file patterns (e.g. `.github/workflows/*claude*.yml`, `*agent*.yml`) routes these PRs to the security team, and their GitHub PR approval is the persisted, audit-logged record that the review happened. flowscope's job is to flag and annotate; the gate is the PR review process.
+- **Hard block** — fix the workflow or register an exception in `.github/flowscope-exceptions.json` (security team approves via CODEOWNERS).
+- **Requires review** — recorded by the CODEOWNERS-routed PR approval on agentic/high-risk workflow file patterns. *This tier assumes the deployment-level CODEOWNERS controls are in place* (see [Step 4](#step-4--route-workflow-and-exception-changes-through-codeowners)); without them, REQUIRES_REVIEW is an unblocked annotation. flowscope's role is to point the reviewer at the specific risk pattern within a diff CODEOWNERS already routed to them.
+- **Advisory** — inline `# flowscope:reason: <why>` comment on the scope line, or remove the scope.
+- **Warning** — defined but currently unemitted; reserved for observation-plane signals (declared scope exceeds observed runtime usage).
 
-**Warning** is a defined tier reserved for non-blocking advisories (e.g. write scopes that exceed observed runtime usage); no rule currently emits at this level — it's wired in for when the observation plane provides baseline data.
-
-A job is considered "scoped" when it has an explicit `permissions:` block. A workflow-level write scope is only acceptable when every job declares its own permissions block — otherwise that write scope silently applies to jobs that may not need it.
-
-**Trigger-based risk.** Not every write scope is equally dangerous — context matters. `pull_request_target` runs in the base repo context with secrets and write tokens but fires on PRs from forks: if the workflow ever checks out the PR's HEAD ref, attacker-controlled code executes with write access. This is the canonical fork-PR-poisoning pattern behind several well-publicized GitHub Actions CVEs. `workflow_run` inherits implicit secrets access from the triggering workflow — a legitimate pattern for deploy-after-CI, but each chain is a privilege escalation path if upstream is compromised. Rules 5 and 6 catch these specifically.
-
-**High-risk scopes.** Some write scopes carry blast radius beyond standard read/write semantics. `actions: write` is the most underestimated: it cannot modify workflow files (GitHub locks that behind the separate `workflow` PAT scope) but it *can* delete workflow run logs (anti-forensics), delete artifacts, disable workflows (turn off security gates), and manipulate caches. `id-token: write` mints OIDC tokens, typically used to assume cloud IAM roles — directly extending blast radius into your cloud provider. `packages: write` and `attestations: write` reach into supply chain and provenance respectively. Rule 7 treats these as advisory rather than blocking: declare an inline justification (`# flowscope:reason: <why>`) on the scope line to suppress, otherwise the advisory surfaces in the step summary as a soft signal that someone should look.
+**Context matters.** Not every write scope is equally dangerous. `pull_request_target` runs in the base-repo context with secrets but fires on fork PRs — if the workflow checks out the PR HEAD, attacker code executes with write access (Rules 5, 6 catch this trigger family). Among scopes themselves, `actions: write` cannot modify workflow files (locked behind the `workflow` PAT scope) but can delete logs (anti-forensics), disable workflows (turn off security gates), and manipulate caches; `id-token: write` mints OIDC tokens for cloud IAM role assumption — both deserve inline justification (Rule 7).
 
 ---
 
 ## Deploying org-wide
 
-The most effective deployment is as a [required workflow](https://docs.github.com/en/actions/sharing-automations/required-workflows) at the org level. Every repo in the org gets coverage automatically — no per-repo setup, no opt-out.
+Most effective deployment is as a [required workflow](https://docs.github.com/en/actions/sharing-automations/required-workflows) at the org level. Every repo gets coverage automatically, no opt-out.
 
-Flowscope assumes three platform-level controls are in place (see [Deployment Assumptions](docs/architecture.md#deployment-assumptions) in the architecture doc): self-hosted runners for token-level audit, org-mandated required workflows so coverage cannot be bypassed, and org-level CODEOWNERS routing workflow changes to the right reviewers. The steps below configure those controls and the flowscope-specific pieces around them.
+Flowscope assumes three platform-level controls (see [Deployment Assumptions](docs/architecture.md#deployment-assumptions)): self-hosted runners for token-level audit, org-mandated required workflows so coverage cannot be bypassed, and org-level CODEOWNERS routing workflow changes to the right reviewers.
 
 ### Step 1 — Create the required workflow
 
-In your org's central `.github` repo, create a reusable workflow:
+In your org's central `.github` repo:
 
 ```yaml
 # .github/workflows/flowscope-gate.yml
 name: Permission gate
-
 on:
   pull_request:
     paths:
@@ -56,180 +52,110 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@<sha>  # pin to a SHA
+      - name: Install flowscope
+        run: pip install "git+https://github.com/mshade/flowscope.git" --quiet
 
-      - name: Get changed workflow files
-        id: changed
+      - name: Scan changed workflow files
         run: |
-          git fetch origin ${{ github.base_ref }} --depth=1
-          FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD \
-            -- '.github/workflows/*.yml' '.github/workflows/*.yaml')
-          echo "files=$FILES" >> "$GITHUB_OUTPUT"
-
-      - name: Analyze each changed workflow
-        run: |
-          while IFS= read -r workflow; do
-            [ -z "$workflow" ] && continue
-            echo "=== $workflow ==="
-            EXCEPTIONS=".github/flowscope-exceptions.json"
-            ARGS="workflow_file=$workflow"
-            [ -f "$EXCEPTIONS" ] && ARGS="$ARGS exceptions_file=$EXCEPTIONS"
-          done <<< "${{ steps.changed.outputs.files }}"
-
-      - uses: mshade/flowscope@<sha>  # pin to a SHA
-        with:
-          workflow_file: ${{ matrix.workflow }}
-          exceptions_file: .github/flowscope-exceptions.json
-          create_exception_pr: "true"
+          git fetch origin "$GITHUB_BASE_REF" --depth=1
+          git diff --name-only "origin/$GITHUB_BASE_REF...HEAD" \
+            -- '.github/workflows/*.yml' '.github/workflows/*.yaml' \
+            | while IFS= read -r workflow; do
+                [ -z "$workflow" ] && continue
+                echo "=== $workflow ==="
+                ARGS=("$workflow")
+                [ -f .github/flowscope-exceptions.json ] \
+                  && ARGS+=(--exceptions .github/flowscope-exceptions.json)
+                flowscope "${ARGS[@]}"
+              done
 ```
 
-Then configure it as a required workflow in **Organization Settings → Actions → Required workflows**.
+Configure it as a required workflow in **Organization Settings → Actions → Required workflows**.
 
 ### Step 2 — Restrict which actions developers can use
 
-Flowscope gates permissions on workflows that exist, but it cannot prevent a developer from adding a malicious or unvetted action before the PR is reviewed. GitHub's **Actions allowlist** closes this gap.
+flowscope gates permissions on workflows that exist; it cannot prevent a developer adding a malicious or unvetted action. GitHub's **Actions allowlist** (**Organization Settings → Actions → General**) closes that gap by refusing to run actions outside an approved list. The runner enforces it before workflow code executes.
 
-In **Organization Settings → Actions → General**, set the allowed actions policy to one of:
-
-- **Allow select actions** — explicitly list approved actions and patterns. Developers cannot use anything outside the list regardless of what they put in a workflow file.
-- **Allow actions created by GitHub** — permits only GitHub-owned actions; blocks all third-party and marketplace actions.
-
-A practical middle ground for most orgs:
+A practical allowlist:
 
 ```
-# Allow GitHub's own actions
-actions/*
-
-# Allow internally published actions from your org
-your-org/*
-
-# Explicitly allow vetted third-party actions (pin to SHA in workflows)
-astral-sh/setup-uv@*
+actions/*                # GitHub's own actions
+your-org/*               # Your org's internally published actions
+astral-sh/setup-uv@*     # Vetted third-party — pin to SHA in workflows
 mshade/flowscope@*
 ```
 
-The allowlist is enforced by the GitHub Actions runner before any workflow code executes — a workflow referencing a non-allowlisted action will fail to start, not just fail a lint check. Combined with flowscope (which checks permissions on allowed workflows) and CODEOWNERS (which gates exception approval), the three controls form a layered defense:
+The combined layered defense:
 
 | Control | What it prevents |
 |---------|-----------------|
-| Actions allowlist | Arbitrary third-party code executing in your runners |
+| Actions allowlist | Arbitrary third-party code executing in runners |
 | flowscope | Excessive token scope on approved workflows |
 | CODEOWNERS routing (workflow files + exceptions file) | Unreviewed workflow changes; self-approved permission escalation |
 | Self-hosted runners | Opaque runtime; enables full token audit and observation plane |
 
-### Step 3 — Migrate to self-hosted runners for full auditability
+### Step 3 — Migrate to self-hosted runners
 
-GitHub-hosted runners are ephemeral and opaque — you can see what a workflow declared, but not what its token actually called at runtime. Self-hosted runners give you control over the execution environment and a path to complete audit coverage.
+GitHub-hosted runners are opaque: workflow-level logs only, no visibility into what `GITHUB_TOKEN` called at the network layer. Self-hosted runners enable:
 
-**What self-hosted runners enable:**
+- **Network egress control** — route runner traffic through a proxy/firewall; token API calls become observable.
+- **Observation plane hooks** — the planned post-job hook that records actual scope usage runs on runners you control.
+- **Audit telemetry** — every job start, action execution, and token use flows to your SIEM.
+- **Ephemeral isolation** — via [actions-runner-controller](https://github.com/actions/actions-runner-controller).
 
-- **Network egress visibility** — route runner traffic through a proxy or firewall to log (and optionally block) outbound calls. Token API calls become observable.
-- **Observation plane hooks** — the planned observation plane attaches a post-job hook to self-hosted runners that records which API endpoints the `GITHUB_TOKEN` called, producing the baseline JSON that flowscope uses to calibrate Rule 4.
-- **Runner-level audit logs** — your SIEM sees every job start, action execution, and token use, not just what GitHub surfaces in the Actions UI.
-- **Ephemeral isolation** — self-hosted ephemeral runners (e.g. via [actions-runner-controller](https://github.com/actions/actions-runner-controller)) give you clean-room execution without shared state between jobs.
-
-**Gradual rollout strategy:**
-
-Forcing self-hosted runners everywhere at once breaks existing workflows. Use runner groups to migrate incrementally:
-
-1. **Create a runner group** restricted to high-risk repos (those with deploy or write-scoped workflows).
-2. **Update those workflows** to target your runner label (`runs-on: self-hosted-secure`) while leaving others on `ubuntu-latest`.
-3. **Expand the group** as you validate that workflows behave identically on self-hosted.
-4. **Set the runner group as the org default** once coverage is sufficient, blocking `ubuntu-latest` for new workflows via branch protection.
-
-Self-hosted runners are the prerequisite for the observation plane — without them, runtime baseline data cannot be collected centrally.
+Use runner groups to migrate incrementally: scope a group to high-risk repos first, expand as workflows validate, then set the group as the org default.
 
 ### Step 4 — Route workflow and exception changes through CODEOWNERS
 
-CODEOWNERS provides the human audit layer on top of flowscope's static analysis. Configure it at the org level (via the `.github` repo) so it applies to every repo by default, then explicitly control the following paths:
+CODEOWNERS provides the human audit layer on top of static analysis — and is what makes REQUIRES_REVIEW act as a gate rather than just an annotation. Configure at the org level (via `.github`) so it applies to every repo, and explicitly control:
 
 | Path | Reviewer | Why |
 |------|----------|-----|
-| `.github/CODEOWNERS` | platform + security | Routing itself must not be self-modifiable. If devs can change CODEOWNERS, the whole control plane unravels. |
-| `.github/workflows/**` | platform team | All workflow changes get a human reviewer — catches what static analysis can't (`run:` step bodies, novel actions, suspicious patterns). |
-| `.github/actions/**`, `action.yml`, `action.yaml` | platform team | Composite actions and local action definitions execute in the same trust context as workflows. |
-| `.github/workflows/*deploy*.yml`, `*release*.yml` | security team | Deploy/release workflows hold the most powerful tokens — escalate via more specific patterns (last match wins in CODEOWNERS). |
-| `.github/workflows/*claude*.yml`, `*agent*.yml`, `*ai*.yml` | security team | Agentic workflows are the highest-risk category; they should always get security review. |
-| `.github/flowscope-exceptions.json` | security team | Permission exceptions are an explicit security-team decision — never self-approved. |
+| `.github/CODEOWNERS` | platform + security | Routing itself must not be self-modifiable |
+| `.github/workflows/**` | platform team | All workflow changes get a human reviewer |
+| `.github/actions/**`, `action.yml`, `action.yaml` | platform team | Composite/local actions execute in the same trust context |
+| `.github/workflows/*deploy*.yml`, `*release*.yml` | security team | Most powerful tokens; escalate via specific patterns (last match wins) |
+| `.github/workflows/*claude*.yml`, `*agent*.yml`, `*ai*.yml` | security team | Highest-risk category — always security review |
+| `.github/flowscope-exceptions.json` | security team | Permission exceptions are explicit security-team decisions |
 
-A working example:
-
-```
-# .github/CODEOWNERS
-
-# Meta-protection: CODEOWNERS itself
-.github/CODEOWNERS                            @your-org/platform-team @your-org/security-team
-
-# General workflow + action audit
-.github/workflows/**                          @your-org/platform-team
-.github/actions/**                            @your-org/platform-team
-action.yml                                    @your-org/platform-team
-action.yaml                                   @your-org/platform-team
-
-# Risk-tiered escalation (more specific patterns override)
-.github/workflows/*deploy*.yml                @your-org/security-team
-.github/workflows/*release*.yml               @your-org/security-team
-.github/workflows/*claude*.yml                @your-org/security-team
-.github/workflows/*agent*.yml                 @your-org/security-team
-.github/workflows/*ai*.yml                    @your-org/security-team
-
-# Exception entries
-.github/flowscope-exceptions.json             @your-org/security-team
-```
-
-Combined with a [branch protection rule](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches) requiring CODEOWNERS review, this means:
-
-- Routing itself cannot be changed without security and platform sign-off
-- Every workflow and action change has a human reviewer beyond the original author
-- High-risk workflows automatically escalate to the security team
-- Exception entries cannot be self-approved
-- Git history of every controlled path is a full audit trail
+Combined with a [branch protection rule](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches) requiring CODEOWNERS review: routing cannot be changed without sign-off, high-risk workflows escalate automatically, exceptions cannot be self-approved, and git history of every controlled path becomes the audit trail.
 
 ### Step 5 — Enable automatic exception PRs
 
-Set `create_exception_pr: "true"` on the action (requires `contents: write` and `pull-requests: write` on the calling workflow). When flowscope blocks a PR, it automatically:
+Set `create_exception_pr: "true"` on the action (requires `contents: write` and `pull-requests: write`). When flowscope blocks a PR, it automatically:
 
-1. Creates a branch `flowscope/exception-<workflow-stem>`
+1. Creates branch `flowscope/exception-<workflow-stem>` (deterministic — re-pushes are idempotent)
 2. Scaffolds `.github/flowscope-exceptions.json` with the blocked scopes pre-filled
-3. Opens a draft PR and comments on the original PR with a link
-4. The developer fills in `justification` and confirms `expires_at`, then marks it ready for review
-5. Security team reviews via CODEOWNERS requirement and merges
-6. The exception is active immediately on merge — no further action required
+3. Opens a draft PR and comments on the original PR with the link
+4. Developer fills `justification` and confirms `expires_at`, marks ready for review
+5. Security team approves via CODEOWNERS, merges — exception is active immediately
 
-This eliminates the friction of finding the right file format and opening a PR manually; developers get a one-click path to the approval queue.
+Removes the friction of finding the right file format and opening a PR manually.
+
+### Step 6 — Gradual rollout with `--warn-only`
+
+Before flipping enforcement on, deploy in audit mode. `warn_only: "true"` exits 0 regardless of violations; the step summary marks them as "would have failed":
+
+```yaml
+      - uses: mshade/flowscope@<sha>
+        with:
+          workflow_file: ${{ env.WORKFLOW }}
+          warn_only: "true"
+          registry_url: ${{ secrets.FLOWSCOPE_REGISTRY_URL }}
+```
+
+`registry_url` (or env var `FLOWSCOPE_REGISTRY_URL`) POSTs the violations JSON to a central endpoint when violations are found — the integration point for the policy plane. Best-effort, never fails the check.
+
+Typical rollout: deploy warn-only org-wide → review the registry feed → fix or register exceptions for the common patterns → flip warn-only off for low-risk repo groups first → expand to default-blocking.
 
 ---
 
 ## Using it in a single repo
 
-### Basic usage
-
-Analyze a single workflow file:
+Drop into `.github/workflows/permission-gate.yml`:
 
 ```yaml
 name: Permission gate
-
-on:
-  pull_request:
-    paths:
-      - '.github/workflows/**'
-
-jobs:
-  flowscope:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@<sha>  # pin to a SHA
-      - uses: mshade/flowscope@<sha>  # pin to a SHA
-        with:
-          workflow_file: .github/workflows/deploy.yml
-```
-
-### Analyzing all changed workflow files
-
-```yaml
-name: Permission gate
-
 on:
   pull_request:
     paths:
@@ -242,41 +168,21 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@<sha>
-
-      - name: Get changed workflow files
-        id: changed
-        run: |
-          git fetch origin ${{ github.base_ref }} --depth=1
-          git diff --name-only origin/${{ github.base_ref }}...HEAD \
-            -- '.github/workflows/*.yml' \
-            | tee changed_workflows.txt
-
-      - name: Analyze each changed workflow
-        run: |
-          while IFS= read -r workflow; do
-            echo "=== $workflow ==="
-            uv run flowscope "$workflow"
-          done < changed_workflows.txt
-```
-
-### With an exceptions file
-
-Teams with legitimate broad permission requirements can register a scoped exception. Pass a JSON file to suppress specific violations:
-
-```yaml
       - uses: mshade/flowscope@<sha>
         with:
           workflow_file: .github/workflows/deploy.yml
           exceptions_file: .github/flowscope-exceptions.json
 ```
 
-`flowscope-exceptions.json` format:
+### Exceptions file
+
+`.github/flowscope-exceptions.json`:
 
 ```json
 [
   {
     "scope": "contents",
-    "justification": "Deploy job pushes a release tag — write access is required",
+    "justification": "Deploy job pushes a release tag — write access required",
     "approved_by": "security-team",
     "expires_at": "2027-01-01",
     "workflow": ".github/workflows/deploy.yml",
@@ -285,63 +191,19 @@ Teams with legitimate broad permission requirements can register a scoped except
 ]
 ```
 
-Each exception is scoped to a `(scope, workflow)` pair so an approval for one workflow does not silently suppress violations in other workflows. Omit `workflow` to create a repo-wide grant. Exceptions expire automatically on `expires_at` — an expired exception is treated as if it does not exist.
+Each exception is scoped to a `(scope, workflow)` pair — an approval for one workflow does not silently suppress violations in another. Omit `workflow` for a repo-wide grant. Exceptions expire automatically on `expires_at`.
 
-### Gradual rollout with `--warn-only`
+### Consuming the check result
 
-Before enforcing hard blocks across an org, use audit mode to surface violations without breaking builds. With `warn_only: "true"`, flowscope exits 0 regardless of what it finds — violations appear in the step summary as "would have failed" but do not block the PR.
-
-```yaml
-      - uses: mshade/flowscope@<sha>
-        with:
-          workflow_file: .github/workflows/deploy.yml
-          warn_only: "true"
-          registry_url: ${{ secrets.FLOWSCOPE_REGISTRY_URL }}
-```
-
-**`registry_url`** (or env var `FLOWSCOPE_REGISTRY_URL`) POSTs the full violations JSON to a central endpoint when violations are found. This is the integration point for the policy plane — a future service will aggregate these reports across repos, giving the security team visibility into the org-wide violation backlog before enforcement is turned on. The POST is best-effort and never fails the check.
-
-A typical rollout sequence:
-
-1. Deploy as a required workflow with `warn_only: "true"` — all repos, no breakage
-2. Review the registry feed (or step summaries) to understand the violation landscape
-3. Fix or register exceptions for the most common violations
-4. Flip `warn_only` to `"false"` for low-risk repo groups first (e.g. internal tooling)
-5. Expand hard enforcement progressively until the org default is blocking
-
-### Consuming the check result downstream
-
-The action exposes a `result` output containing the full JSON check result:
+The action exposes a `result` output with the full JSON check result:
 
 ```yaml
       - uses: mshade/flowscope@<sha>
         id: gate
         with:
           workflow_file: .github/workflows/deploy.yml
-
-      - name: Post summary
-        if: always()
+      - if: always()
         run: echo '${{ steps.gate.outputs.result }}' | jq .
-```
-
-The result schema:
-
-```json
-{
-  "workflow_path": ".github/workflows/deploy.yml",
-  "passed": false,
-  "violations": [
-    {
-      "tier": "hard_block",
-      "file_path": ".github/workflows/deploy.yml",
-      "line": null,
-      "scope": "write-all",
-      "job_id": null,
-      "message": "permissions: write-all grants full token access",
-      "remediation": "Replace with explicit per-job permission blocks..."
-    }
-  ]
-}
 ```
 
 ---
@@ -349,58 +211,35 @@ The result schema:
 ## Running locally
 
 ```bash
-# Install
 uv sync --extra dev
 
-# Analyze a workflow file
 uv run flowscope path/to/workflow.yml
-
-# With an exceptions file
 uv run flowscope path/to/workflow.yml --exceptions .github/flowscope-exceptions.json
-
-# Audit mode — report violations but exit 0 (for gradual rollout)
 uv run flowscope path/to/workflow.yml --warn-only
-
-# Audit mode with central registry reporting
-FLOWSCOPE_REGISTRY_URL=https://your-registry/ingest \
-  uv run flowscope path/to/workflow.yml --warn-only
 
 # Scan all workflows in a GitHub repo (requires gh CLI)
 task scan -- https://github.com/your-org/your-repo
-
-# Exit code: 0 = passed or --warn-only, 1 = violation found
 ```
+
+Exit code: `0` = passed or `--warn-only`, `1` = hard-block found.
 
 ---
 
 ## Development
 
 ```bash
-task test       # run the full test suite
+task test       # pytest
 task lint       # ruff check
-task fmt        # ruff format (modifies files)
+task fmt        # ruff format
 task check      # lint + format check + test
 ```
 
-Tests use YAML fixture files in `tests/fixtures/` that cover each violation case. When adding a new policy rule, add a corresponding fixture and test in `tests/test_policy.py`. The four existing rules in `src/flowscope/policy.py` serve as a template.
-
-To add support for a new agentic action, add its name (without `@ref`) to `AGENTIC_ACTIONS` in `src/flowscope/policy.py`:
-
-```python
-AGENTIC_ACTIONS: set[str] = {
-    "anthropics/claude-code-action",
-    "your-org/your-agentic-action",  # add here
-}
-```
+New policy rules go in `src/flowscope/policy.py` with a fixture in `tests/fixtures/` and tests in `tests/test_policy.py`. To register a new agentic action, add it to `AGENTIC_ACTIONS`; for a new high-risk scope, add it to `HIGH_RISK_SCOPES` with a one-line rationale.
 
 ---
 
 ## Background
 
-Flowscope is Component 1 (the enforcement plane) of a three-plane Workflow Permission Governance System:
+Flowscope is the enforcement plane of a three-plane Workflow Permission Governance System. The architecture, including the planned **observation plane** (runner hooks recording actual token usage) and **policy plane** (baseline store + exception registry with audit trail), is in [`docs/architecture.md`](docs/architecture.md).
 
-- **Enforcement plane** ← *this tool*: PR gate, static analysis, policy-driven check results
-- **Policy plane** (planned): per-workflow permission baselines, exception registry, policy rules
-- **Observation plane** (planned): runner hooks that record actual runtime token usage to build baselines
-
-The static analysis gate is intentionally conservative where no runtime baseline exists. When the observation plane is deployed and baselines are established, the gate uses them to calibrate — warning only on scopes that exceed observed usage rather than blocking all declared write scopes. This matters most for existing repos: the observation plane generates baseline data from every workflow execution, not just ones under active modification, which surfaces overprovisioning in workflows that predate flowscope adoption.
+The static analysis gate is intentionally conservative where no runtime baseline exists. With the observation plane deployed, the gate calibrates against actual usage — warning when declared scope exceeds observed need. This is most valuable for existing repos: the observation plane sees every workflow execution, not just changes under PR review, surfacing pre-existing overprovisioning that a PR gate can never catch.
