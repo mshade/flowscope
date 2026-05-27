@@ -26,6 +26,10 @@ def scaffold(violations_json: dict[str, Any], workflow: str, output_path: Path) 
     if output_path.exists():
         with open(output_path) as fh:
             existing = json.load(fh)
+        if not isinstance(existing, list):
+            raise ValueError(
+                f"{output_path} must contain a JSON array, got {type(existing).__name__}"
+            )
 
     existing_keys = {(e.get("scope"), e.get("workflow")) for e in existing}
     new_entries = [
@@ -37,6 +41,11 @@ def scaffold(violations_json: dict[str, Any], workflow: str, output_path: Path) 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as fh:
         json.dump(existing + new_entries, fh, indent=2)
+
+
+def _run_scaffold(args: argparse.Namespace) -> None:
+    violations_json = json.load(sys.stdin)
+    scaffold(violations_json, args.workflow, args.output)
 
 
 def main() -> None:
@@ -57,12 +66,10 @@ def main() -> None:
         default=Path(".github/flowscope-exceptions.json"),
         help="Path to write/merge exceptions file",
     )
+    scaffold_parser.set_defaults(func=_run_scaffold)
 
     args = parser.parse_args()
-
-    if args.command == "scaffold":
-        violations_json = json.load(sys.stdin)
-        scaffold(violations_json, args.workflow, args.output)
+    args.func(args)
 
 
 if __name__ == "__main__":
