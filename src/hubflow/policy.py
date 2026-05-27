@@ -45,7 +45,7 @@ def _steps_for_job(raw_doc: Optional[dict], job_id: str) -> list[dict]:
 
 def _job_uses_agentic_action(raw_doc: Optional[dict], job_id: str) -> bool:
     for step in _steps_for_job(raw_doc, job_id):
-        uses = step.get("uses", "")
+        uses = step.get("uses") or ""
         action_name = uses.split("@")[0] if "@" in uses else uses
         if action_name in AGENTIC_ACTIONS:
             return True
@@ -119,6 +119,27 @@ def evaluate_policy(
         if has_unscoped:
             for scope in write_scopes_at_workflow:
                 if not _scope_is_excepted(scope, exceptions):
+                    if unscoped_jobs:
+                        msg = (
+                            f"Workflow-level write scope '{scope}' applies to "
+                            f"unscoped jobs: {unscoped_jobs}. "
+                            "Job-level permissions blocks must override it."
+                        )
+                        rem = (
+                            f"Add an explicit permissions block to each job "
+                            f"({', '.join(unscoped_jobs)}) to restrict the "
+                            f"'{scope}' write scope to only jobs that need it."
+                        )
+                    else:
+                        msg = (
+                            f"Workflow-level write scope '{scope}' is declared but "
+                            "job enumeration was unavailable — all jobs may be exposed "
+                            "to this write scope without job-level scoping."
+                        )
+                        rem = (
+                            f"Add explicit per-job permissions blocks to restrict "
+                            f"the '{scope}' write scope to only jobs that need it."
+                        )
                     violations.append(
                         Violation(
                             tier=ViolationTier.HARD_BLOCK,
@@ -126,20 +147,13 @@ def evaluate_policy(
                             line=None,
                             scope=scope,
                             job_id=None,
-                            message=(
-                                f"Workflow-level write scope '{scope}' applies to "
-                                f"unscoped jobs: {unscoped_jobs}. "
-                                "Job-level permissions blocks must override it."
-                            ),
-                            remediation=(
-                                f"Add an explicit permissions block to each job "
-                                f"({', '.join(unscoped_jobs)}) to restrict the "
-                                f"'{scope}' write scope to only jobs that need it."
-                            ),
+                            message=msg,
+                            remediation=rem,
                         )
                     )
 
     # ── Rule 4: agentic step with write scope and no baseline ────────────────
+    # Without raw_doc, step data is unavailable; Rule 4 cannot detect agentic actions
     all_job_ids = _job_names_from_doc(raw_doc) or list(perms.jobs.keys())
     for job_id in all_job_ids:
         if not _job_uses_agentic_action(raw_doc, job_id):
