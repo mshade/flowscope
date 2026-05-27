@@ -103,8 +103,31 @@ The allowlist is enforced by the GitHub Actions runner before any workflow code 
 | Actions allowlist | Arbitrary third-party code executing in your runners |
 | flowscope | Excessive token scope on approved workflows |
 | CODEOWNERS on exceptions file | Self-approved permission escalation |
+| Self-hosted runners | Opaque runtime; enables full token audit and observation plane |
 
-### Step 2 — Protect the exceptions file with CODEOWNERS
+### Step 2 — Migrate to self-hosted runners for full auditability
+
+GitHub-hosted runners are ephemeral and opaque — you can see what a workflow declared, but not what its token actually called at runtime. Self-hosted runners give you control over the execution environment and a path to complete audit coverage.
+
+**What self-hosted runners enable:**
+
+- **Network egress visibility** — route runner traffic through a proxy or firewall to log (and optionally block) outbound calls. Token API calls become observable.
+- **Observation plane hooks** — the planned observation plane attaches a post-job hook to self-hosted runners that records which API endpoints the `GITHUB_TOKEN` called, producing the baseline JSON that flowscope uses to calibrate Rule 4.
+- **Runner-level audit logs** — your SIEM sees every job start, action execution, and token use, not just what GitHub surfaces in the Actions UI.
+- **Ephemeral isolation** — self-hosted ephemeral runners (e.g. via [actions-runner-controller](https://github.com/actions/actions-runner-controller)) give you clean-room execution without shared state between jobs.
+
+**Gradual rollout strategy:**
+
+Forcing self-hosted runners everywhere at once breaks existing workflows. Use runner groups to migrate incrementally:
+
+1. **Create a runner group** restricted to high-risk repos (those with deploy or write-scoped workflows).
+2. **Update those workflows** to target your runner label (`runs-on: self-hosted-secure`) while leaving others on `ubuntu-latest`.
+3. **Expand the group** as you validate that workflows behave identically on self-hosted.
+4. **Set the runner group as the org default** once coverage is sufficient, blocking `ubuntu-latest` for new workflows via branch protection.
+
+Self-hosted runners are the prerequisite for the observation plane — without them, runtime baseline data cannot be collected centrally.
+
+### Step 4 — Protect the exceptions file with CODEOWNERS
 
 In each consuming repo (or via a default CODEOWNERS in the `.github` repo), require security team review on the exceptions file:
 
@@ -119,7 +142,7 @@ Combined with a [branch protection rule](https://docs.github.com/en/repositories
 - Merging an exception entry = security team has explicitly signed off
 - The git history of the exceptions file is a full audit trail
 
-### Step 3 — Enable automatic exception PRs
+### Step 5 — Enable automatic exception PRs
 
 Set `create_exception_pr: "true"` on the action (requires `contents: write` and `pull-requests: write` on the calling workflow). When flowscope blocks a PR, it automatically:
 
@@ -222,6 +245,28 @@ Teams with legitimate broad permission requirements can register a scoped except
 
 Each exception is scoped to a `(scope, workflow)` pair so an approval for one workflow does not silently suppress violations in other workflows. Omit `workflow` to create a repo-wide grant. Exceptions expire automatically on `expires_at` — an expired exception is treated as if it does not exist.
 
+### Gradual rollout with `--warn-only`
+
+Before enforcing hard blocks across an org, use audit mode to surface violations without breaking builds. With `warn_only: "true"`, flowscope exits 0 regardless of what it finds — violations appear in the step summary as "would have failed" but do not block the PR.
+
+```yaml
+      - uses: mshade/flowscope@<sha>
+        with:
+          workflow_file: .github/workflows/deploy.yml
+          warn_only: "true"
+          registry_url: ${{ secrets.FLOWSCOPE_REGISTRY_URL }}
+```
+
+**`registry_url`** (or env var `FLOWSCOPE_REGISTRY_URL`) POSTs the full violations JSON to a central endpoint when violations are found. This is the integration point for the policy plane — a future service will aggregate these reports across repos, giving the security team visibility into the org-wide violation backlog before enforcement is turned on. The POST is best-effort and never fails the check.
+
+A typical rollout sequence:
+
+1. Deploy as a required workflow with `warn_only: "true"` — all repos, no breakage
+2. Review the registry feed (or step summaries) to understand the violation landscape
+3. Fix or register exceptions for the most common violations
+4. Flip `warn_only` to `"false"` for low-risk repo groups first (e.g. internal tooling)
+5. Expand hard enforcement progressively until the org default is blocking
+
 ### Consuming the check result downstream
 
 The action exposes a `result` output containing the full JSON check result:
@@ -271,10 +316,17 @@ uv run flowscope path/to/workflow.yml
 # With an exceptions file
 uv run flowscope path/to/workflow.yml --exceptions .github/flowscope-exceptions.json
 
+# Audit mode — report violations but exit 0 (for gradual rollout)
+uv run flowscope path/to/workflow.yml --warn-only
+
+# Audit mode with central registry reporting
+FLOWSCOPE_REGISTRY_URL=https://your-registry/ingest \
+  uv run flowscope path/to/workflow.yml --warn-only
+
 # Scan all workflows in a GitHub repo (requires gh CLI)
 task scan -- https://github.com/your-org/your-repo
 
-# Exit code: 0 = passed, 1 = violation found
+# Exit code: 0 = passed or --warn-only, 1 = violation found
 ```
 
 ---

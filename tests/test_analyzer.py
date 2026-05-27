@@ -113,3 +113,16 @@ def test_cli_outputs_json():
     data = json.loads(result.stdout)
     assert "violations" in data
     assert "passed" in data
+
+
+def test_cli_warn_only_exits_0_on_violation():
+    result = subprocess.run(
+        [sys.executable, "-m", "flowscope.cli", "--warn-only", str(FIXTURES / "write_all.yml")],
+        capture_output=True,
+        text=True,
+        env=_SUBPROCESS_ENV,
+    )
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    assert data["passed"] is False  # result still reflects actual state
+    assert len(data["violations"]) > 0

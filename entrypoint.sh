@@ -5,10 +5,12 @@ WORKFLOW_FILE="${INPUT_WORKFLOW_FILE:?INPUT_WORKFLOW_FILE is required}"
 BASELINE_FILE="${INPUT_BASELINE_FILE:-}"
 EXCEPTIONS_FILE="${INPUT_EXCEPTIONS_FILE:-}"
 CREATE_EXCEPTION_PR="${INPUT_CREATE_EXCEPTION_PR:-false}"
+WARN_ONLY="${INPUT_WARN_ONLY:-false}"
 
 ARGS=("$WORKFLOW_FILE")
 [[ -n "$BASELINE_FILE" ]] && ARGS+=("--baseline" "$BASELINE_FILE")
 [[ -n "$EXCEPTIONS_FILE" ]] && ARGS+=("--exceptions" "$EXCEPTIONS_FILE")
+[[ "$WARN_ONLY" == "true" ]] && ARGS+=("--warn-only")
 
 # Capture output and exit code without triggering set -e on non-zero exit
 set +e

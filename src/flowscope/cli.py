@@ -2,6 +2,8 @@ import argparse
 import json
 import os
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 from .analyzer import analyze_workflow
@@ -15,7 +17,7 @@ _TIER_LABEL = {
 }
 
 
-def _write_step_summary(output: dict) -> None:
+def _write_step_summary(output: dict, warn_only: bool = False) -> None:
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
     if not summary_path:
         return
@@ -27,12 +29,23 @@ def _write_step_summary(output: dict) -> None:
 
     passed = output.get("passed", True)
     violations = output.get("violations", [])
-    status = "✅ Passed" if passed else "❌ Failed"
+
+    if passed:
+        status = "✅ Passed"
+    elif warn_only:
+        status = "⚠️ Audit mode — would fail"
+    else:
+        status = "❌ Failed"
 
     with open(summary_path, "a") as f:
         f.write(f"## flowscope — `{wf}`\n\n")
         if violations:
             f.write(f"**{status}** — {len(violations)} violation(s)\n\n")
+            if warn_only:
+                f.write(
+                    "> ⚠️ **Audit mode** (`--warn-only`): these violations would block "
+                    "the check under full enforcement. No action required now.\n\n"
+                )
             f.write("| Tier | Message | Remediation |\n")
             f.write("|------|---------|-------------|\n")
             for v in violations:
@@ -43,6 +56,20 @@ def _write_step_summary(output: dict) -> None:
         else:
             f.write(f"**{status}**\n")
         f.write("\n")
+
+
+def _post_to_registry(output: dict, registry_url: str) -> None:
+    payload = json.dumps(output).encode()
+    req = urllib.request.Request(
+        registry_url,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        urllib.request.urlopen(req, timeout=5)
+    except Exception as exc:
+        print(f"flowscope: warning: registry POST failed: {exc}", file=sys.stderr)
 
 
 def _violation_to_dict(v: Violation) -> dict:
@@ -74,6 +101,24 @@ def main() -> None:
         default=None,
         help="Path to a JSON file with registered exceptions",
     )
+    parser.add_argument(
+        "--warn-only",
+        action="store_true",
+        default=False,
+        help=(
+            "Exit 0 even when violations are found. Prints a summary of what would "
+            "have failed. Use during gradual rollout before enabling hard enforcement."
+        ),
+    )
+    parser.add_argument(
+        "--registry-url",
+        default=os.environ.get("FLOWSCOPE_REGISTRY_URL"),
+        metavar="URL",
+        help=(
+            "POST violations JSON to this URL for central audit tracking "
+            "(env: FLOWSCOPE_REGISTRY_URL). Intended for the policy plane."
+        ),
+    )
     args = parser.parse_args()
 
     observed_baseline = None
@@ -96,9 +141,12 @@ def main() -> None:
         "violations": [_violation_to_dict(v) for v in result.violations],
     }
     print(json.dumps(output, indent=2))
-    _write_step_summary(output)
+    _write_step_summary(output, warn_only=args.warn_only)
 
-    sys.exit(0 if result.passed else 1)
+    if args.registry_url and not result.passed:
+        _post_to_registry(output, args.registry_url)
+
+    sys.exit(0 if (result.passed or args.warn_only) else 1)
 
 
 if __name__ == "__main__":

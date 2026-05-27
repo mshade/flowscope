@@ -23,6 +23,20 @@ inputs:
       pull-requests: write permissions in the calling workflow.
     required: false
     default: "false"
+  warn_only:
+    description: >
+      When true, exit 0 even when violations are found. Prints an audit
+      summary of what would have failed. Use during gradual rollout before
+      enabling hard enforcement.
+    required: false
+    default: "false"
+  registry_url:
+    description: >
+      URL to POST violations JSON for central audit tracking. Intended for
+      the policy plane (not yet implemented). Can also be set via the
+      FLOWSCOPE_REGISTRY_URL environment variable.
+    required: false
+    default: ""
 
 outputs:
   result:
@@ -41,4 +55,6 @@ runs:
         INPUT_BASELINE_FILE: ${{ inputs.baseline_file }}
         INPUT_EXCEPTIONS_FILE: ${{ inputs.exceptions_file }}
         INPUT_CREATE_EXCEPTION_PR: ${{ inputs.create_exception_pr }}
+        INPUT_WARN_ONLY: ${{ inputs.warn_only }}
+        FLOWSCOPE_REGISTRY_URL: ${{ inputs.registry_url }}
       run: "${{ github.action_path }}/entrypoint.sh"
