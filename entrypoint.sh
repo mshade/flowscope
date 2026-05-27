@@ -31,7 +31,7 @@ if [[ "$CREATE_EXCEPTION_PR" == "true" && "$EXIT_CODE" -ne 0 ]]; then
     WORKFLOW_STEM=$(basename "${WORKFLOW_FILE}" .yml)
     BRANCH="flowscope/exception-${WORKFLOW_STEM}"
 
-    if git ls-remote --heads origin "${BRANCH}" | grep -q "${BRANCH}"; then
+    if git ls-remote --exit-code --heads origin "${BRANCH}" > /dev/null 2>&1; then
         # Branch already exists — find the open PR and comment on the original
         EXCEPTION_PR_URL=$(gh pr list --head "${BRANCH}" --json url --jq '.[0].url // empty' 2>/dev/null || echo "")
         PR_NUMBER=$(python -c "import json,os; d=json.load(open(os.environ['GITHUB_EVENT_PATH'])); print(d.get('pull_request',{}).get('number',''))" 2>/dev/null || echo "")
@@ -51,7 +51,12 @@ if [[ "$CREATE_EXCEPTION_PR" == "true" && "$EXIT_CODE" -ne 0 ]]; then
 
         echo "$OUTPUT" | python -m flowscope.exception scaffold --workflow "${WORKFLOW_FILE}"
 
-        git add .github/flowscope-exceptions.json
+        git add .github/flowscope-exceptions.json 2>/dev/null || true
+        if git diff --cached --quiet; then
+            echo "No new exception entries generated; skipping PR creation." >&2
+            exit "$EXIT_CODE"
+        fi
+
         git commit -m "chore: flowscope exception request for ${WORKFLOW_STEM}"
         git push origin "${BRANCH}"
 
@@ -73,7 +78,7 @@ The exception is active immediately on merge — no further action required."
             --draft \
             --title "flowscope: exception request for ${WORKFLOW_STEM}" \
             --body "$PR_BODY" \
-            --head "${BRANCH}")
+            --head "${BRANCH}" | tail -1)
 
         PR_NUMBER=$(python -c "import json,os; d=json.load(open(os.environ['GITHUB_EVENT_PATH'])); print(d.get('pull_request',{}).get('number',''))" 2>/dev/null || echo "")
         if [[ -n "$PR_NUMBER" ]]; then
