@@ -31,6 +31,11 @@ tasks:
       ARGS: '{{.CLI_ARGS}}'
     cmd: |
       set -euo pipefail
+      if ! command -v gh &>/dev/null; then
+        echo "error: 'gh' (GitHub CLI) is required for task scan." >&2
+        echo "Install it from https://cli.github.com, then run 'gh auth login'." >&2
+        exit 1
+      fi
       ARGS=({{.ARGS}})
       if [[ ${#ARGS[@]} -eq 0 ]]; then
         echo "Usage: task scan -- <github-repo-url> [workflow-file ...]" >&2
