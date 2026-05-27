@@ -154,4 +154,4 @@ Branch names are deterministic (`flowscope/exception-<stem>`), so re-running the
 
 ## Future path: central aggregation
 
-Per-repo exceptions are the right default. If org-wide visibility becomes a requirement, a nightly aggregation job can collect `flowscope-exceptions.json` from all repos via the GitHub API without changing the per-repo storage model or the consuming repo's workflow.
+Per-repo exceptions are the current default. If org-wide visibility becomes a requirement, a nightly aggregation job can collect `flowscope-exceptions.json` from all repos via the GitHub API without changing the per-repo storage model or the consuming repo's workflow.
