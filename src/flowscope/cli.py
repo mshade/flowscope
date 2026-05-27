@@ -7,7 +7,6 @@ from pathlib import Path
 from .analyzer import analyze_workflow
 from .models import Violation
 
-
 _TIER_LABEL = {
     "hard_block": "🔴 hard\\_block",
     "requires_review": "🟠 requires\\_review",
