@@ -75,15 +75,7 @@ tasks:
             exit $GH_EXIT
           }
           rm -f "$GH_ERR"
-          WORKFLOWS=$(echo "$RAW" | python3 -c "
-import sys, json
-data = json.load(sys.stdin)
-if not isinstance(data, list):
-    print(f'Unexpected API response: {json.dumps(data)[:200]}', file=sys.stderr)
-    sys.exit(1)
-names = [f['name'] for f in data if f.get('type') == 'file' and f['name'].endswith(('.yml', '.yaml'))]
-print('\n'.join(names))
-" 2>&1) || exit 1
+          WORKFLOWS=$(echo "$RAW" | python3 -c 'import sys,json; d=json.load(sys.stdin); (print("Unexpected API response: "+str(d)[:200],file=sys.stderr) or sys.exit(1)) if not isinstance(d,list) else [print(f["name"]) for f in d if f.get("type")=="file" and f["name"].endswith((".yml",".yaml"))]')
           if [[ -z "$WORKFLOWS" ]]; then
             echo "No workflow files (.yml/.yaml) found in ${OWNER_REPO}/.github/workflows" >&2
             exit 1
