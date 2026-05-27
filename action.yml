@@ -1,4 +1,4 @@
-name: hubflow-static-analysis-gate
+name: flowscope-static-analysis-gate
 description: >
   Analyzes GitHub Actions workflow files for permission scope violations.
   Hard-blocks write-all, implicit full access, and unscoped workflow-level writes.
@@ -24,7 +24,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Install hubflow
+    - name: Install flowscope
       shell: bash
       run: pip install -e "${{ github.action_path }}" --quiet
     - name: Run static analysis gate

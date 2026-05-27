@@ -1,8 +1,8 @@
 from pathlib import Path
 import json
 import pytest
-from hubflow.analyzer import analyze_workflow
-from hubflow.models import ViolationTier
+from flowscope.analyzer import analyze_workflow
+from flowscope.models import ViolationTier
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -71,7 +71,7 @@ import sys
 
 def test_cli_exits_1_on_hard_block():
     result = subprocess.run(
-        [sys.executable, "-m", "hubflow.cli", str(FIXTURES / "write_all.yml")],
+        [sys.executable, "-m", "flowscope.cli", str(FIXTURES / "write_all.yml")],
         capture_output=True,
         text=True,
     )
@@ -80,7 +80,7 @@ def test_cli_exits_1_on_hard_block():
 
 def test_cli_exits_0_on_clean():
     result = subprocess.run(
-        [sys.executable, "-m", "hubflow.cli", str(FIXTURES / "clean_minimal.yml")],
+        [sys.executable, "-m", "flowscope.cli", str(FIXTURES / "clean_minimal.yml")],
         capture_output=True,
         text=True,
     )
@@ -89,7 +89,7 @@ def test_cli_exits_0_on_clean():
 
 def test_cli_outputs_json():
     result = subprocess.run(
-        [sys.executable, "-m", "hubflow.cli", str(FIXTURES / "write_all.yml")],
+        [sys.executable, "-m", "flowscope.cli", str(FIXTURES / "write_all.yml")],
         capture_output=True,
         text=True,
     )

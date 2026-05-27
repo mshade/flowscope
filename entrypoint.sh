@@ -10,7 +10,7 @@ ARGS=("$WORKFLOW_FILE")
 [[ -n "$EXCEPTIONS_FILE" ]] && ARGS+=("--exceptions" "$EXCEPTIONS_FILE")
 
 # Run once, capture output; || true prevents set -e from exiting early
-OUTPUT=$(python -m hubflow.cli "${ARGS[@]}" || true)
+OUTPUT=$(python -m flowscope.cli "${ARGS[@]}" || true)
 EXIT_CODE=$?
 
 # Surface JSON output as a step output for downstream jobs

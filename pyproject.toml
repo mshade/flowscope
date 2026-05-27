@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "hubflow"
+name = "flowscope"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.scripts]
-hubflow = "hubflow.cli:main"
+flowscope = "flowscope.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -20,7 +20,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/hubflow"]
+packages = ["src/flowscope"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

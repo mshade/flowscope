@@ -178,7 +178,7 @@ def evaluate_policy(
                         "has a higher blast radius."
                     ),
                     remediation=(
-                        "Instrument the runner with the hubflow post-job hook to "
+                        "Instrument the runner with the flowscope post-job hook to "
                         "establish an observed baseline, or manually justify each "
                         "write scope with an inline comment."
                     ),

@@ -1,7 +1,7 @@
 from pathlib import Path
 import pytest
-from hubflow.models import AccessLevel, WorkflowPermissions
-from hubflow.parser import parse_workflow
+from flowscope.models import AccessLevel, WorkflowPermissions
+from flowscope.parser import parse_workflow
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
