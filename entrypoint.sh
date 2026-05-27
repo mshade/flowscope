@@ -26,40 +26,48 @@ fi
 # Print to stdout for CI logs
 echo "$OUTPUT"
 
-# Emit GitHub Actions annotations so violations appear inline on the PR.
-# OUTPUT is passed via env var; the heredoc supplies the script to python's stdin.
-if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+# Write a markdown summary to the Actions step summary panel.
+# This avoids the double-annotation problem that occurs when ::error:: commands
+# are emitted alongside GHA's built-in "Process completed with exit code 1" annotation.
+if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
     FLOWSCOPE_OUTPUT="$OUTPUT" python3 - <<'PYEOF'
 import json, os
 
 data = json.loads(os.environ["FLOWSCOPE_OUTPUT"])
 workspace = os.environ.get("GITHUB_WORKSPACE", "")
-tier_level = {"hard_block": "error", "requires_review": "error", "warning": "warning", "advisory": "notice"}
+wf = data.get("workflow_path", "")
+if workspace and wf.startswith(workspace):
+    wf = wf[len(workspace):].lstrip("/")
 
-for v in data.get("violations", []):
-    tier  = v.get("tier", "warning")
-    level = tier_level.get(tier, "error")
-    msg   = v.get("message", "")
-    fix   = v.get("remediation", "")
-    path  = v.get("file_path", "")
-    line  = v.get("line") or ""
+passed = data.get("passed", True)
+violations = data.get("violations", [])
 
-    if workspace and path.startswith(workspace):
-        path = path[len(workspace):].lstrip("/")
+status = "✅ Passed" if passed else "❌ Failed"
+summary_path = os.environ["GITHUB_STEP_SUMMARY"]
 
-    title = f"flowscope [{tier}]"
-    props = f"title={title}"
-    if path:
-        props += f",file={path}"
-    if line:
-        props += f",line={line}"
+tier_label = {
+    "hard_block":      "🔴 hard\_block",
+    "requires_review": "🟠 requires\_review",
+    "warning":         "🟡 warning",
+    "advisory":        "🔵 advisory",
+}
 
-    body = msg
-    if fix:
-        body += f" | Fix: {fix}"
-    body = body.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-
-    print(f"::{level} {props}::{body}")
+with open(summary_path, "a") as f:
+    f.write(f"## flowscope — `{wf}`\n\n")
+    f.write(f"**{status}**")
+    if violations:
+        f.write(f" — {len(violations)} violation(s)\n\n")
+        f.write("| Tier | Message | Remediation |\n")
+        f.write("|------|---------|-------------|\n")
+        for v in violations:
+            tier = v.get("tier", "")
+            label = tier_label.get(tier, tier)
+            msg = v.get("message", "").replace("|", "\\|")
+            fix = v.get("remediation", "").replace("|", "\\|")
+            f.write(f"| {label} | {msg} | {fix} |\n")
+    else:
+        f.write("\n")
+    f.write("\n")
 PYEOF
 fi
 
