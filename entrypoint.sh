@@ -26,6 +26,44 @@ fi
 # Print to stdout for CI logs
 echo "$OUTPUT"
 
+# Emit GitHub Actions annotations so violations appear inline on the PR
+if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+    echo "$OUTPUT" | python3 - <<'PYEOF'
+import sys, json, os
+
+data = json.load(sys.stdin)
+workspace = os.environ.get("GITHUB_WORKSPACE", "")
+tier_level = {"hard_block": "error", "requires_review": "error", "warning": "warning", "advisory": "notice"}
+
+for v in data.get("violations", []):
+    tier  = v.get("tier", "warning")
+    level = tier_level.get(tier, "error")
+    msg   = v.get("message", "")
+    fix   = v.get("remediation", "")
+    path  = v.get("file_path", "")
+    line  = v.get("line") or ""
+
+    # Make path workspace-relative so GitHub links it to a file
+    if workspace and path.startswith(workspace):
+        path = path[len(workspace):].lstrip("/")
+
+    title = f"flowscope [{tier}]"
+    props = f"title={title}"
+    if path:
+        props += f",file={path}"
+    if line:
+        props += f",line={line}"
+
+    body = msg
+    if fix:
+        body += f" | Fix: {fix}"
+    # GitHub annotation encoding
+    body = body.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+    print(f"::{level} {props}::{body}")
+PYEOF
+fi
+
 # Exception PR creation — opt-in, only when violations exist
 if [[ "$CREATE_EXCEPTION_PR" == "true" && "$EXIT_CODE" -ne 0 ]]; then
     WORKFLOW_STEM=$(basename "${WORKFLOW_FILE}" .yml)
