@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -6,6 +7,10 @@ from pathlib import Path
 from flowscope.analyzer import analyze_workflow
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+# Strip GHA-specific env vars from subprocess calls so test runs don't
+# accidentally write to the CI step summary.
+_SUBPROCESS_ENV = {k: v for k, v in os.environ.items() if k != "GITHUB_STEP_SUMMARY"}
 
 
 def test_write_all_fails_check():
@@ -83,6 +88,7 @@ def test_cli_exits_1_on_hard_block():
         [sys.executable, "-m", "flowscope.cli", str(FIXTURES / "write_all.yml")],
         capture_output=True,
         text=True,
+        env=_SUBPROCESS_ENV,
     )
     assert result.returncode == 1
 
@@ -92,6 +98,7 @@ def test_cli_exits_0_on_clean():
         [sys.executable, "-m", "flowscope.cli", str(FIXTURES / "clean_minimal.yml")],
         capture_output=True,
         text=True,
+        env=_SUBPROCESS_ENV,
     )
     assert result.returncode == 0
 
@@ -101,6 +108,7 @@ def test_cli_outputs_json():
         [sys.executable, "-m", "flowscope.cli", str(FIXTURES / "write_all.yml")],
         capture_output=True,
         text=True,
+        env=_SUBPROCESS_ENV,
     )
     data = json.loads(result.stdout)
     assert "violations" in data
