@@ -15,8 +15,6 @@ _IMPLICIT_FULL_SCOPE = "implicit-full-access"
 
 
 def _is_exception_active(exc: dict[str, Any]) -> bool:
-    if exc.get("status") != "active":
-        return False
     try:
         expires = date.fromisoformat(str(exc["expires_at"]))
     except (KeyError, ValueError):
@@ -24,9 +22,11 @@ def _is_exception_active(exc: dict[str, Any]) -> bool:
     return expires >= date.today()
 
 
-def _scope_is_excepted(scope: str, exceptions: list[dict]) -> bool:
+def _scope_is_excepted(scope: str, exceptions: list[dict], workflow_path: str = "") -> bool:
     return any(
-        exc.get("scope") == scope and _is_exception_active(exc)
+        exc.get("scope") == scope
+        and _is_exception_active(exc)
+        and (not exc.get("workflow") or exc.get("workflow") == workflow_path)
         for exc in exceptions
     )
 
@@ -64,7 +64,7 @@ def evaluate_policy(
 
     # ── Rule 1: write-all ────────────────────────────────────────────────────
     if perms.write_all:
-        if not _scope_is_excepted(_WRITE_ALL_SCOPE, exceptions):
+        if not _scope_is_excepted(_WRITE_ALL_SCOPE, exceptions, workflow_path=workflow_path):
             violations.append(
                 Violation(
                     tier=ViolationTier.HARD_BLOCK,
@@ -83,7 +83,7 @@ def evaluate_policy(
 
     # ── Rule 2: implicit full access (permissions: {}) ───────────────────────
     if perms.implicit_full_access:
-        if not _scope_is_excepted(_IMPLICIT_FULL_SCOPE, exceptions):
+        if not _scope_is_excepted(_IMPLICIT_FULL_SCOPE, exceptions, workflow_path=workflow_path):
             violations.append(
                 Violation(
                     tier=ViolationTier.HARD_BLOCK,
@@ -118,7 +118,7 @@ def evaluate_policy(
 
         if has_unscoped:
             for scope in write_scopes_at_workflow:
-                if not _scope_is_excepted(scope, exceptions):
+                if not _scope_is_excepted(scope, exceptions, workflow_path=workflow_path):
                     if unscoped_jobs:
                         msg = (
                             f"Workflow-level write scope '{scope}' applies to "

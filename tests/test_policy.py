@@ -79,7 +79,6 @@ def test_registered_exception_suppresses_hard_block():
             "justification": "Legacy deploy job requires full token",
             "approved_by": "platform-team",
             "expires_at": str(date(2099, 1, 1)),
-            "status": "active",
         }
     ]
     violations = evaluate_policy(perms, "test.yml", raw_doc=None, exceptions=exceptions)
@@ -95,8 +94,58 @@ def test_expired_exception_does_not_suppress():
             "justification": "Old exception",
             "approved_by": "platform-team",
             "expires_at": str(date(2020, 1, 1)),
-            "status": "active",
         }
     ]
     violations = evaluate_policy(perms, "test.yml", raw_doc=None, exceptions=exceptions)
+    assert any(v.tier == ViolationTier.HARD_BLOCK for v in violations)
+
+
+def test_exception_without_workflow_field_suppresses_any_workflow():
+    from datetime import date
+    perms = parse_workflow(FIXTURES / "write_all.yml")
+    exceptions = [
+        {
+            "scope": "write-all",
+            "justification": "Repo-wide grant",
+            "approved_by": "platform-team",
+            "expires_at": str(date(2099, 1, 1)),
+        }
+    ]
+    violations = evaluate_policy(perms, "any-workflow.yml", raw_doc=None, exceptions=exceptions)
+    assert not any(v.tier == ViolationTier.HARD_BLOCK for v in violations)
+
+
+def test_exception_with_matching_workflow_suppresses():
+    from datetime import date
+    perms = parse_workflow(FIXTURES / "write_all.yml")
+    exceptions = [
+        {
+            "scope": "write-all",
+            "justification": "Deploy needs full token",
+            "approved_by": "platform-team",
+            "expires_at": str(date(2099, 1, 1)),
+            "workflow": ".github/workflows/deploy.yml",
+        }
+    ]
+    violations = evaluate_policy(
+        perms, ".github/workflows/deploy.yml", raw_doc=None, exceptions=exceptions
+    )
+    assert not any(v.tier == ViolationTier.HARD_BLOCK for v in violations)
+
+
+def test_exception_with_nonmatching_workflow_does_not_suppress():
+    from datetime import date
+    perms = parse_workflow(FIXTURES / "write_all.yml")
+    exceptions = [
+        {
+            "scope": "write-all",
+            "justification": "Deploy needs full token",
+            "approved_by": "platform-team",
+            "expires_at": str(date(2099, 1, 1)),
+            "workflow": ".github/workflows/deploy.yml",
+        }
+    ]
+    violations = evaluate_policy(
+        perms, ".github/workflows/release.yml", raw_doc=None, exceptions=exceptions
+    )
     assert any(v.tier == ViolationTier.HARD_BLOCK for v in violations)
