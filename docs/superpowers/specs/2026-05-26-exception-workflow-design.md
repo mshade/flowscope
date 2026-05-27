@@ -34,7 +34,6 @@ Exceptions live in `.github/flowscope-exceptions.json` in each consuming repo. C
 ```json
 {
   "scope": "contents:write",
-  "status": "active",
   "justification": "TODO: describe why this exception is needed",
   "approved_by": "",
   "expires_at": "YYYY-MM-DD",
@@ -46,16 +45,17 @@ Exceptions live in `.github/flowscope-exceptions.json` in each consuming repo. C
 | Field | Required by policy engine | Purpose |
 |---|---|---|
 | `scope` | yes | Permission scope being excepted |
-| `status` | yes | Must be `active`; no other value is recognised |
 | `expires_at` | yes | ISO date; policy engine rejects expired entries |
 | `workflow` | yes (new) | Scopes the exception to a specific workflow file |
 | `justification` | no | Human-readable reason; filled by developer before review |
 | `approved_by` | no | Optional; security reviewer may fill before approving. The PR merge record and CODEOWNERS audit trail are the authoritative approval evidence |
 | `job_id` | no | Informational context for reviewer |
 
-`status: active` is set by the scaffold at creation time. The PR review and merge via CODEOWNERS is the governance gate — there is no separate post-merge activation step. The exception is live the moment the PR lands.
+`status` is removed. The three gates are scope+workflow match, expiry, and CODEOWNERS-enforced merge approval. To revoke an exception, delete the entry or let it expire.
 
-### Policy engine change
+### Policy engine changes
+
+`_is_exception_active` drops the `status` check. An entry is active if it is not expired.
 
 `_scope_is_excepted` gains an optional `workflow_path` parameter. When matching:
 
@@ -139,6 +139,8 @@ Branch names are deterministic (`flowscope/exception-<stem>`), so re-running the
 - Exception with matching `workflow` field suppresses the violation
 - Exception with non-matching `workflow` field does not suppress
 - Exception with no `workflow` field suppresses regardless (backwards compat)
+- Expired exception does not suppress (no status field involved)
+- Existing tests updated to remove `status` field from fixtures
 
 **Unit tests — scaffold subcommand:**
 - Produces correct JSON shape for a single violation
