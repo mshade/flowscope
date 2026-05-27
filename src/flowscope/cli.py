@@ -23,7 +23,7 @@ def _write_step_summary(output: dict) -> None:
     wf = output.get("workflow_path", "")
     workspace = os.environ.get("GITHUB_WORKSPACE", "")
     if workspace and wf.startswith(workspace):
-        wf = wf[len(workspace):].lstrip("/")
+        wf = wf[len(workspace) :].lstrip("/")
 
     passed = output.get("passed", True)
     violations = output.get("violations", [])
