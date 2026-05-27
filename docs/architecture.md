@@ -23,8 +23,6 @@ Flowscope is designed around three platform-level controls that must be in place
 | `.github/CODEOWNERS` | platform + security | Routing itself must not be self-modifiable |
 | `.github/workflows/**` | platform team | General audit on every workflow change |
 | `.github/actions/**`, `action.yml`, `action.yaml` | platform team | Composite/local actions execute in the same trust context as workflows |
-| `.github/workflows/*deploy*.yml`, `*release*.yml` | security team | Most powerful tokens; escalate via specific patterns (last match wins) |
-| `.github/workflows/*claude*.yml`, `*agent*.yml`, `*ai*.yml` | security team | Highest-risk category — always security review |
 | `.github/flowscope-exceptions.json` | security team | Permission exceptions are explicit security-team decisions |
 
 Routing is risk-tiered through pattern specificity. The general `.github/workflows/**` line covers any workflow change; more specific patterns override it for higher-risk categories. This can be combined with automated review tooling to scale security team attention to where it matters most.
