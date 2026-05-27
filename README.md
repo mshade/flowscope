@@ -14,6 +14,7 @@ Flowscope is the enforcement plane of a larger [Workflow Permission Governance S
 | `pull_request_target` trigger + any write scope | Hard block | Fails the check (canonical fork-PR-poisoning vector) |
 | `workflow_run` trigger + any write scope | Requires review | Surfaces as an annotation; does not block |
 | Agentic action (e.g. `claude-code-action`) with write scope and no observed baseline | Requires review | Surfaces as an annotation; does not block the check |
+| High-risk scope write (`actions`, `id-token`, `packages`, `attestations`) without inline justification | Advisory | Soft notice; does not block. Suppressed by `# flowscope:reason: <why>` on the scope line |
 
 **Hard block** is resolved by fixing the workflow or registering a formal exception in `.github/flowscope-exceptions.json`.
 
@@ -24,6 +25,8 @@ Flowscope is the enforcement plane of a larger [Workflow Permission Governance S
 A job is considered "scoped" when it has an explicit `permissions:` block. A workflow-level write scope is only acceptable when every job declares its own permissions block — otherwise that write scope silently applies to jobs that may not need it.
 
 **Trigger-based risk.** Not every write scope is equally dangerous — context matters. `pull_request_target` runs in the base repo context with secrets and write tokens but fires on PRs from forks: if the workflow ever checks out the PR's HEAD ref, attacker-controlled code executes with write access. This is the canonical fork-PR-poisoning pattern behind several well-publicized GitHub Actions CVEs. `workflow_run` inherits implicit secrets access from the triggering workflow — a legitimate pattern for deploy-after-CI, but each chain is a privilege escalation path if upstream is compromised. Rules 5 and 6 catch these specifically.
+
+**High-risk scopes.** Some write scopes carry blast radius beyond standard read/write semantics. `actions: write` is the most underestimated: it cannot modify workflow files (GitHub locks that behind the separate `workflow` PAT scope) but it *can* delete workflow run logs (anti-forensics), delete artifacts, disable workflows (turn off security gates), and manipulate caches. `id-token: write` mints OIDC tokens, typically used to assume cloud IAM roles — directly extending blast radius into your cloud provider. `packages: write` and `attestations: write` reach into supply chain and provenance respectively. Rule 7 treats these as advisory rather than blocking: declare an inline justification (`# flowscope:reason: <why>`) on the scope line to suppress, otherwise the advisory surfaces in the step summary as a soft signal that someone should look.
 
 ---
 

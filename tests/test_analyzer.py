@@ -101,6 +101,27 @@ def test_workflow_run_with_write_scope_requires_review():
     assert any(v.scope == "workflow_run" for v in result.violations)
 
 
+def test_high_risk_scope_without_justification_emits_advisory():
+    # Rule 7: id-token: write without inline justification → ADVISORY
+    from flowscope.models import ViolationTier
+
+    result = analyze_workflow(FIXTURES / "high_risk_scope_no_justification.yml")
+    assert result.passed is True  # advisory doesn't block
+    assert not result.has_hard_block()
+    advisories = [v for v in result.violations if v.tier == ViolationTier.ADVISORY]
+    assert len(advisories) == 1
+    assert advisories[0].scope == "id-token"
+
+
+def test_high_risk_scope_with_inline_justification_suppresses_advisory():
+    # Rule 7: the `# flowscope:reason:` marker on the scope line silences the advisory
+    from flowscope.models import ViolationTier
+
+    result = analyze_workflow(FIXTURES / "high_risk_scope_justified.yml")
+    assert result.passed is True
+    assert not any(v.tier == ViolationTier.ADVISORY for v in result.violations)
+
+
 def test_workflow_path_preserved_in_result():
     fixture_path = FIXTURES / "clean_minimal.yml"
     result = analyze_workflow(fixture_path)

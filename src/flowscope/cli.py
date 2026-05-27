@@ -27,19 +27,19 @@ def _write_step_summary(output: dict, warn_only: bool = False) -> None:
     if workspace and wf.startswith(workspace):
         wf = wf[len(workspace) :].lstrip("/")
 
-    passed = output.get("passed", True)
     violations = output.get("violations", [])
     has_hard_block = any(v.get("tier") == "hard_block" for v in violations)
     has_requires_review = any(v.get("tier") == "requires_review" for v in violations)
+    has_advisory = any(v.get("tier") == "advisory" for v in violations)
 
-    if warn_only and violations:
-        status = "⚠️ Audit mode — would fail"
+    if warn_only and has_hard_block:
+        status = "⚠️ Audit mode — would fail (hard block)"
     elif has_hard_block:
         status = "❌ Failed"
     elif has_requires_review:
         status = "🟠 Review required (non-blocking)"
-    elif passed and not violations:
-        status = "✅ Passed"
+    elif has_advisory:
+        status = "ℹ️ Advisory (non-blocking)"
     else:
         status = "✅ Passed"
 
@@ -47,10 +47,11 @@ def _write_step_summary(output: dict, warn_only: bool = False) -> None:
         f.write(f"## flowscope — `{wf}`\n\n")
         if violations:
             f.write(f"**{status}** — {len(violations)} violation(s)\n\n")
-            if warn_only:
+            if warn_only and has_hard_block:
                 f.write(
-                    "> ⚠️ **Audit mode** (`--warn-only`): these violations would block "
-                    "the check under full enforcement. No action required now.\n\n"
+                    "> ⚠️ **Audit mode** (`--warn-only`): hard-block violations are "
+                    "present but not failing the check. Enable full enforcement "
+                    "(remove `--warn-only`) once these are resolved.\n\n"
                 )
             elif has_requires_review and not has_hard_block:
                 f.write(

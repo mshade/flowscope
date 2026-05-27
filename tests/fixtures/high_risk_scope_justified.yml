@@ -1,0 +1,10 @@
+name: Cloud Deploy
+on: [push]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # flowscope:reason: OIDC for AWS deploy via configure-aws-credentials
+    steps:
+      - run: echo "assume cloud role via OIDC"

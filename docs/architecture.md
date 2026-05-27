@@ -103,12 +103,13 @@ The four rules are evaluated in order. Rules 1 and 2 return immediately — ther
 | 4 | Agentic action + write scope + no observed baseline | `REQUIRES_REVIEW` | Non-blocking; flagged for CODEOWNERS-routed human review |
 | 5 | `pull_request_target` trigger + any write scope | `HARD_BLOCK` | Canonical fork-PR-poisoning attack vector |
 | 6 | `workflow_run` trigger + any write scope | `REQUIRES_REVIEW` | Chain inherits implicit secrets access; legitimate but warrants review |
+| 7 | High-risk scope write (`actions`, `id-token`, `packages`, `attestations`) without inline justification | `ADVISORY` | Suppressed by `# flowscope:reason: <why>` on the scope line |
 
 **Violation tiers:**
 - `HARD_BLOCK` — fails the check; resolved by fixing the workflow or registering a formal exception
 - `REQUIRES_REVIEW` — does **not** fail the check; surfaces as an annotation. The recorded human acknowledgment is the CODEOWNERS-gated PR approval on agentic workflow file patterns. Code cannot statically prove an agentic action with write scope is safe; the right gate is a human reviewer of the PR, not a separate exception file.
-- `WARNING` — defined, not yet emitted; does not fail the check
-- `ADVISORY` — planned; write scopes with no inline justification comment
+- `WARNING` — defined, not yet emitted by any rule; reserved for observation-plane outputs (e.g. declared scope exceeds observed usage)
+- `ADVISORY` — non-blocking soft signal. Currently emitted by Rule 7 for high-risk scopes without an inline justification comment
 
 **Exception suppression:** `evaluate_policy` accepts a list of exceptions from `.github/flowscope-exceptions.json`. An exception is active if it is not expired (`expires_at` is a future ISO date). Exceptions are scoped to a `(scope, workflow_path)` pair — a single approved exception does not silently suppress violations in other workflows. Repo-wide grants are supported by omitting the `workflow` field. CODEOWNERS enforces that the security team reviews any change to the exceptions file.
 
@@ -183,6 +184,4 @@ The enforcement plane is production-ready as a standalone CI gate. The two plann
 
 **Policy plane:** A baseline store aggregates observed usage across repos. An exception registry with audit trail replaces the per-repo JSON files for organizations that want centralized governance. Both feed the enforcement plane through the same `--baseline` and `--exceptions` interfaces.
 
-**Advisory tier:** Write scopes with no inline comment on the `permissions` block will emit `ADVISORY` violations — surfacing in annotations without blocking the build. This requires the comment-preserving parse tree that `ruamel.yaml` already provides.
-
-**`WARNING` tier:** Defined in `ViolationTier`, not yet emitted by any rule. Candidate use: write scopes that appear in the baseline but are broader than what was observed.
+**`WARNING` tier:** Defined in `ViolationTier`, not yet emitted by any rule. Candidate use: declared write scopes that the observation plane has never seen exercised at runtime — broader than what's actually used.

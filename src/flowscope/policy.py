@@ -10,8 +10,30 @@ AGENTIC_ACTIONS: set[str] = {
     "anthropics/claude-code-action",
 }
 
+# Scopes whose write capability has outsized blast radius beyond standard
+# read/write semantics. Each requires an inline justification comment
+# (# flowscope:reason: <why>) to suppress the advisory.
+HIGH_RISK_SCOPES: dict[str, str] = {
+    "actions": (
+        "Can delete workflow run logs and artifacts (anti-forensics), "
+        "disable workflows (turn off security gates), and manipulate caches"
+    ),
+    "id-token": (
+        "Mints OIDC tokens — typically used to assume cloud IAM roles, "
+        "directly extending blast radius into your cloud provider"
+    ),
+    "packages": (
+        "Supply chain reach: can publish to GitHub Packages (npm, container registry, etc.)"
+    ),
+    "attestations": (
+        "Signs artifacts via SLSA provenance — abuse undermines "
+        "downstream trust in build provenance"
+    ),
+}
+
 _WRITE_ALL_SCOPE = "write-all"
 _IMPLICIT_FULL_SCOPE = "implicit-full-access"
+_JUSTIFICATION_MARKER = "# flowscope:reason:"
 
 
 def _is_exception_active(exc: dict[str, Any]) -> bool:
@@ -88,6 +110,25 @@ def _write_scoped_locations(perms: WorkflowPermissions) -> list[tuple[Optional[s
             if lvl == AccessLevel.WRITE:
                 locations.append((job_id, scope))
     return locations
+
+
+def _has_inline_justification(workflow_path: str, scope_name: str) -> bool:
+    """True if the scope's declaration line carries a `# flowscope:reason:` comment.
+
+    Simple line-scan against the source: any line whose stripped content begins
+    with `<scope>:` and contains the marker counts. We deliberately do not
+    distinguish workflow-level vs. job-level declarations — a single
+    justification covers all occurrences of the scope in this file.
+    """
+    try:
+        with open(workflow_path) as fh:
+            for line in fh:
+                stripped = line.lstrip()
+                if stripped.startswith(f"{scope_name}:") and _JUSTIFICATION_MARKER in line:
+                    return True
+    except OSError:
+        pass
+    return False
 
 
 def evaluate_policy(
@@ -291,5 +332,41 @@ def evaluate_policy(
                     ),
                 )
             )
+
+    # ── Rule 7: high-risk scopes without inline justification ───────────────
+    # actions/id-token/packages/attestations all have outsized blast radius
+    # (anti-forensics, cloud IAM escalation, supply chain reach, signing).
+    # An inline `# flowscope:reason: <why>` comment on the scope line suppresses.
+    # Tier is ADVISORY — surfaces for review, does not block.
+    for job_id, scope in _write_scoped_locations(perms):
+        if scope not in HIGH_RISK_SCOPES:
+            continue
+        if _has_inline_justification(workflow_path, scope):
+            continue
+        if _scope_is_excepted(scope, exceptions, workflow_path=workflow_path):
+            continue
+
+        location = f"job '{job_id}'" if job_id else "workflow level"
+        rationale = HIGH_RISK_SCOPES[scope]
+        violations.append(
+            Violation(
+                tier=ViolationTier.ADVISORY,
+                file_path=workflow_path,
+                line=None,
+                scope=scope,
+                job_id=job_id,
+                message=(
+                    f"High-risk scope '{scope}: write' at {location} without "
+                    f"inline justification. {rationale}."
+                ),
+                remediation=(
+                    f"Add an inline comment '{_JUSTIFICATION_MARKER} <why this is needed>' "
+                    f"on the '{scope}: write' line — this is a soft signal that someone "
+                    "has thought about why the elevated scope is required and left an "
+                    "audit trail in the workflow itself. Or remove the scope if it isn't "
+                    "actually used. Advisory only — does not block the check."
+                ),
+            )
+        )
 
     return violations
