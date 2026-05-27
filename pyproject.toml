@@ -12,6 +12,7 @@ dependencies = [
 
 [project.scripts]
 flowscope = "flowscope.cli:main"
+flowscope-exception = "flowscope.exception:main"
 
 [project.optional-dependencies]
 dev = [
