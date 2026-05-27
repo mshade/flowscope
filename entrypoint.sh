@@ -9,13 +9,18 @@ ARGS=("$WORKFLOW_FILE")
 [[ -n "$BASELINE_FILE" ]] && ARGS+=("--baseline" "$BASELINE_FILE")
 [[ -n "$EXCEPTIONS_FILE" ]] && ARGS+=("--exceptions" "$EXCEPTIONS_FILE")
 
-python -m hubflow.cli "${ARGS[@]}"
+# Run once, capture output; || true prevents set -e from exiting early
+OUTPUT=$(python -m hubflow.cli "${ARGS[@]}" || true)
 EXIT_CODE=$?
 
 # Surface JSON output as a step output for downstream jobs
-OUTPUT=$(python -m hubflow.cli "${ARGS[@]}" 2>/dev/null || true)
-echo "result<<EOF" >> "$GITHUB_OUTPUT"
-echo "$OUTPUT" >> "$GITHUB_OUTPUT"
-echo "EOF" >> "$GITHUB_OUTPUT"
+if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+    echo "result<<EOF" >> "$GITHUB_OUTPUT"
+    echo "$OUTPUT" >> "$GITHUB_OUTPUT"
+    echo "EOF" >> "$GITHUB_OUTPUT"
+fi
+
+# Print to stdout for CI logs
+echo "$OUTPUT"
 
 exit $EXIT_CODE
