@@ -131,26 +131,49 @@ Self-hosted runners are the prerequisite for the observation plane — without t
 
 ### Step 4 — Route workflow and exception changes through CODEOWNERS
 
-CODEOWNERS provides the human audit layer on top of flowscope's static analysis. Configure it at the org level (via the `.github` repo) to route two different kinds of changes to the right reviewers:
+CODEOWNERS provides the human audit layer on top of flowscope's static analysis. Configure it at the org level (via the `.github` repo) so it applies to every repo by default, then explicitly control the following paths:
+
+| Path | Reviewer | Why |
+|------|----------|-----|
+| `.github/CODEOWNERS` | platform + security | Routing itself must not be self-modifiable. If devs can change CODEOWNERS, the whole control plane unravels. |
+| `.github/workflows/**` | platform team | All workflow changes get a human reviewer — catches what static analysis can't (`run:` step bodies, novel actions, suspicious patterns). |
+| `.github/actions/**`, `action.yml`, `action.yaml` | platform team | Composite actions and local action definitions execute in the same trust context as workflows. |
+| `.github/workflows/*deploy*.yml`, `*release*.yml` | security team | Deploy/release workflows hold the most powerful tokens — escalate via more specific patterns (last match wins in CODEOWNERS). |
+| `.github/workflows/*claude*.yml`, `*agent*.yml`, `*ai*.yml` | security team | Agentic workflows are the highest-risk category; they should always get security review. |
+| `.github/flowscope-exceptions.json` | security team | Permission exceptions are an explicit security-team decision — never self-approved. |
+
+A working example:
 
 ```
 # .github/CODEOWNERS
 
-# Any workflow change goes to the platform team for general audit;
-# this is the layer that catches what static analysis can't reason about
-# (run: step bodies, novel actions, suspicious patterns).
-.github/workflows/**          @your-org/platform-team
+# Meta-protection: CODEOWNERS itself
+.github/CODEOWNERS                            @your-org/platform-team @your-org/security-team
 
-# Exception entries are an explicit security-team decision.
-.github/flowscope-exceptions.json   @your-org/security-team
+# General workflow + action audit
+.github/workflows/**                          @your-org/platform-team
+.github/actions/**                            @your-org/platform-team
+action.yml                                    @your-org/platform-team
+action.yaml                                   @your-org/platform-team
+
+# Risk-tiered escalation (more specific patterns override)
+.github/workflows/*deploy*.yml                @your-org/security-team
+.github/workflows/*release*.yml               @your-org/security-team
+.github/workflows/*claude*.yml                @your-org/security-team
+.github/workflows/*agent*.yml                 @your-org/security-team
+.github/workflows/*ai*.yml                    @your-org/security-team
+
+# Exception entries
+.github/flowscope-exceptions.json             @your-org/security-team
 ```
 
 Combined with a [branch protection rule](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches) requiring CODEOWNERS review, this means:
 
-- Every workflow change has a human reviewer beyond the original author
-- Routing can be risk-tiered: workflows that introduce agentic actions can be routed to the security team via more specific CODEOWNERS patterns
-- Exception entries cannot be self-approved; the security team is the gate
-- Git history of both surfaces is a full audit trail
+- Routing itself cannot be changed without security and platform sign-off
+- Every workflow and action change has a human reviewer beyond the original author
+- High-risk workflows automatically escalate to the security team
+- Exception entries cannot be self-approved
+- Git history of every controlled path is a full audit trail
 
 ### Step 5 — Enable automatic exception PRs
 
