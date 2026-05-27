@@ -48,7 +48,9 @@ def main() -> None:
         with open(args.exceptions) as fh:
             exceptions = json.load(fh)
 
-    result = analyze_workflow(args.workflow, observed_baseline=observed_baseline, exceptions=exceptions)
+    result = analyze_workflow(
+        args.workflow, observed_baseline=observed_baseline, exceptions=exceptions
+    )
 
     output = {
         "workflow_path": result.workflow_path,

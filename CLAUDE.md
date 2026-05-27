@@ -5,20 +5,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-# Install / sync dependencies
+# Install / sync dependencies (includes ruff, pytest)
 uv sync --extra dev
 
 # Run all tests
-uv run pytest tests/ -v
+task test                        # or: uv run pytest tests/ -v
 
-# Run a single test
-uv run pytest tests/test_policy.py::test_write_all_is_hard_block -v
+# Lint and format
+task lint                        # ruff check
+task fmt                         # ruff format (modifies files)
+task fmt:check                   # ruff format --check (read-only)
+task check                       # lint + fmt:check + test
 
 # Run the CLI against a workflow file
 uv run flowscope path/to/workflow.yml
 
 # With optional baseline and exceptions files
 uv run flowscope path/to/workflow.yml --baseline baseline.json --exceptions exceptions.json
+
+# Scan all workflows in a GitHub repo (requires gh CLI + auth)
+task scan -- https://github.com/owner/repo
+
+# Scan specific workflow files in a GitHub repo
+task scan -- https://github.com/owner/repo .github/workflows/build.yml .github/workflows/deploy.yml
 ```
 
 ## Architecture

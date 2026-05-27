@@ -27,7 +27,8 @@ def analyze_workflow(
         exceptions=exceptions,
     )
 
-    passed = not any(v.tier in (ViolationTier.HARD_BLOCK, ViolationTier.REQUIRES_REVIEW) for v in violations)
+    blocking = (ViolationTier.HARD_BLOCK, ViolationTier.REQUIRES_REVIEW)
+    passed = not any(v.tier in blocking for v in violations)
 
     return CheckResult(
         workflow_path=str(workflow_path),

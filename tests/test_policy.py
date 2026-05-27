@@ -1,5 +1,5 @@
 from pathlib import Path
-import pytest
+
 from flowscope.models import AccessLevel, JobPermissions, ViolationTier, WorkflowPermissions
 from flowscope.parser import parse_workflow
 from flowscope.policy import evaluate_policy
@@ -8,6 +8,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 # ── Hard-block rules ──────────────────────────────────────────────────────────
+
 
 def test_write_all_is_hard_block():
     perms = parse_workflow(FIXTURES / "write_all.yml")
@@ -32,6 +33,7 @@ def test_workflow_level_write_no_job_scoping_is_hard_block():
 
 # ── Clean workflow passes ─────────────────────────────────────────────────────
 
+
 def test_clean_minimal_has_no_hard_block():
     perms = parse_workflow(FIXTURES / "clean_minimal.yml")
     violations = evaluate_policy(perms, "test.yml", raw_doc=None)
@@ -39,6 +41,7 @@ def test_clean_minimal_has_no_hard_block():
 
 
 # ── Job-level scoping lifts hard-block ───────────────────────────────────────
+
 
 def test_workflow_level_write_with_all_jobs_scoped_no_hard_block():
     """workflow-level write is acceptable when every job has explicit job-level permissions."""
@@ -55,8 +58,10 @@ def test_workflow_level_write_with_all_jobs_scoped_no_hard_block():
 
 # ── Requires-review rules ─────────────────────────────────────────────────────
 
+
 def test_agentic_step_with_write_scope_and_no_baseline_requires_review():
     from ruamel.yaml import YAML as _YAML
+
     _yaml = _YAML()
     with open(FIXTURES / "agentic_step.yml") as fh:
         raw = _yaml.load(fh)
@@ -70,8 +75,10 @@ def test_agentic_step_with_write_scope_and_no_baseline_requires_review():
 
 # ── Exceptions suppress violations ───────────────────────────────────────────
 
+
 def test_registered_exception_suppresses_hard_block():
     from datetime import date
+
     perms = parse_workflow(FIXTURES / "write_all.yml")
     exceptions = [
         {
@@ -87,6 +94,7 @@ def test_registered_exception_suppresses_hard_block():
 
 def test_expired_exception_does_not_suppress():
     from datetime import date
+
     perms = parse_workflow(FIXTURES / "write_all.yml")
     exceptions = [
         {
@@ -102,6 +110,7 @@ def test_expired_exception_does_not_suppress():
 
 def test_exception_without_workflow_field_suppresses_any_workflow():
     from datetime import date
+
     perms = parse_workflow(FIXTURES / "write_all.yml")
     exceptions = [
         {
@@ -117,6 +126,7 @@ def test_exception_without_workflow_field_suppresses_any_workflow():
 
 def test_exception_with_matching_workflow_suppresses():
     from datetime import date
+
     perms = parse_workflow(FIXTURES / "write_all.yml")
     exceptions = [
         {
@@ -135,6 +145,7 @@ def test_exception_with_matching_workflow_suppresses():
 
 def test_exception_with_nonmatching_workflow_does_not_suppress():
     from datetime import date
+
     perms = parse_workflow(FIXTURES / "write_all.yml")
     exceptions = [
         {

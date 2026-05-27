@@ -1,8 +1,5 @@
 import json
 from datetime import date, timedelta
-from pathlib import Path
-
-import pytest
 
 from flowscope.exception import scaffold
 

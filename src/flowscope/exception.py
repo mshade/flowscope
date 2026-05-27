@@ -33,9 +33,7 @@ def scaffold(violations_json: dict[str, Any], workflow: str, output_path: Path) 
 
     existing_keys = {(e.get("scope"), e.get("workflow")) for e in existing}
     new_entries = [
-        _build_entry(v, workflow)
-        for v in violations
-        if (v["scope"], workflow) not in existing_keys
+        _build_entry(v, workflow) for v in violations if (v["scope"], workflow) not in existing_keys
     ]
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

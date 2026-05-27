@@ -1,0 +1,75 @@
+version: '3'
+
+tasks:
+  test:
+    desc: Run all tests
+    cmd: uv run pytest tests/ -v
+
+  lint:
+    desc: Lint with ruff
+    cmd: uv run ruff check src/ tests/
+
+  fmt:
+    desc: Format code with ruff
+    cmd: uv run ruff format src/ tests/
+
+  fmt:check:
+    desc: Check formatting without modifying files
+    cmd: uv run ruff format --check src/ tests/
+
+  check:
+    desc: Lint, format check, and test
+    deps: [lint, fmt:check, test]
+
+  scan:
+    desc: |
+      Run flowscope against a GitHub repo or specific workflow files.
+      Usage:
+        task scan -- https://github.com/owner/repo
+        task scan -- https://github.com/owner/repo .github/workflows/build.yml [...]
+    vars:
+      ARGS: '{{.CLI_ARGS}}'
+    cmd: |
+      set -euo pipefail
+      ARGS=({{.ARGS}})
+      if [[ ${#ARGS[@]} -eq 0 ]]; then
+        echo "Usage: task scan -- <github-repo-url> [workflow-file ...]" >&2
+        exit 1
+      fi
+
+      FIRST="${ARGS[0]}"
+      TMPDIR=$(mktemp -d)
+      trap 'rm -rf "$TMPDIR"' EXIT
+
+      # Extract owner/repo from a github.com URL
+      if [[ "$FIRST" =~ github\.com/([^/]+/[^/]+) ]]; then
+        OWNER_REPO="${BASH_REMATCH[1]}"
+
+        if [[ ${#ARGS[@]} -gt 1 ]]; then
+          # Specific workflow files given as additional args
+          for WF_PATH in "${ARGS[@]:1}"; do
+            WF_NAME=$(basename "$WF_PATH")
+            echo "=== Scanning ${OWNER_REPO}/${WF_PATH} ==="
+            gh api "repos/${OWNER_REPO}/contents/${WF_PATH}" --jq '.content' \
+              | base64 -d > "$TMPDIR/${WF_NAME}"
+            uv run flowscope "$TMPDIR/${WF_NAME}" || true
+          done
+        else
+          # Discover all workflows in the repo
+          WORKFLOWS=$(gh api "repos/${OWNER_REPO}/contents/.github/workflows" \
+            --jq '.[].name' 2>/dev/null || true)
+          if [[ -z "$WORKFLOWS" ]]; then
+            echo "No workflows found in ${OWNER_REPO}/.github/workflows" >&2
+            exit 1
+          fi
+          while IFS= read -r WF_NAME; do
+            echo "=== Scanning ${WF_NAME} ==="
+            gh api "repos/${OWNER_REPO}/contents/.github/workflows/${WF_NAME}" \
+              --jq '.content' | base64 -d > "$TMPDIR/${WF_NAME}"
+            uv run flowscope "$TMPDIR/${WF_NAME}" || true
+          done <<< "$WORKFLOWS"
+        fi
+      else
+        echo "Expected a github.com URL, got: $FIRST" >&2
+        exit 1
+      fi

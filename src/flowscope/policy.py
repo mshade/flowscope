@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Optional
 
-from .models import AccessLevel, JobPermissions, Violation, ViolationTier, WorkflowPermissions
+from .models import AccessLevel, Violation, ViolationTier, WorkflowPermissions
 
 # Actions known to make dynamic API calls under the job token
 AGENTIC_ACTIONS: set[str] = {
@@ -92,8 +92,7 @@ def evaluate_policy(
                     scope=_IMPLICIT_FULL_SCOPE,
                     job_id=None,
                     message=(
-                        "permissions: {} (empty map) is equivalent to write-all "
-                        "on GitHub Actions"
+                        "permissions: {} (empty map) is equivalent to write-all on GitHub Actions"
                     ),
                     remediation=(
                         "Declare explicit scopes at the job level. "

@@ -1,8 +1,9 @@
-from pathlib import Path
 import json
-import pytest
+import subprocess
+import sys
+from pathlib import Path
+
 from flowscope.analyzer import analyze_workflow
-from flowscope.models import ViolationTier
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -71,11 +72,10 @@ def test_agentic_step_requires_review_fails_check():
 def test_workflow_path_preserved_in_result():
     fixture_path = FIXTURES / "clean_minimal.yml"
     result = analyze_workflow(fixture_path)
-    assert str(fixture_path) in result.workflow_path or str(fixture_path.absolute()) == result.workflow_path
-
-
-import subprocess
-import sys
+    assert (
+        str(fixture_path) in result.workflow_path
+        or str(fixture_path.absolute()) == result.workflow_path
+    )
 
 
 def test_cli_exits_1_on_hard_block():

@@ -1,6 +1,4 @@
 import textwrap
-from pathlib import Path
-import pytest
 
 
 def make_workflow(content: str) -> str:

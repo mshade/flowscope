@@ -1,6 +1,6 @@
 from pathlib import Path
-import pytest
-from flowscope.models import AccessLevel, WorkflowPermissions
+
+from flowscope.models import AccessLevel
 from flowscope.parser import parse_workflow
 
 FIXTURES = Path(__file__).parent / "fixtures"

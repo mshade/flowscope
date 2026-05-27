@@ -18,7 +18,14 @@ flowscope-exception = "flowscope.exception:main"
 dev = [
     "pytest>=8",
     "pytest-cov",
+    "ruff>=0.4",
 ]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/flowscope"]
