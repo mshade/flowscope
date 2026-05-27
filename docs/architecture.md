@@ -8,6 +8,18 @@ The goal: enable least-privilege permissions as a structural gate in CI. Create 
 
 ---
 
+## Deployment Assumptions
+
+Flowscope is designed around three platform-level controls that must be in place for the system to be effective. These are not optional enhancements — they are the environment the enforcement plane assumes.
+
+**Self-hosted runners.** GitHub-hosted runners are opaque: you get workflow-level logs but no visibility into what the `GITHUB_TOKEN` actually called at the network layer. Self-hosted runners are the preferred execution environment because egress and ingress are controllable — API traffic can be routed through a proxy or firewall, making token usage observable. Runner-level telemetry feeds a SIEM. The observation plane's post-job hooks, which record actual scope usage to build baselines, require a runner the org controls.
+
+**Org-mandated required workflows.** Flowscope is deployed as a GitHub [required workflow](https://docs.github.com/en/actions/sharing-automations/required-workflows) at the org level, scoped to `.github/workflows/**` path changes. Coverage is automatic across every repo in the org — no per-repo opt-in, and no way for a developer to remove the gate from their own repo. The check fires on every PR that touches a workflow file, before merge.
+
+**Org-level CODEOWNERS on workflow files.** An entry in the org's central `.github` repo routes workflow file changes to the right reviewers — not just the exceptions file, but the workflows themselves. This provides a human audit layer on top of static analysis, and can be risk-tiered: changes that introduce agentic actions route to the security team; general CI changes route to the platform team. This can be combined with automated review tooling (e.g. a bot that flags specific patterns) to scale the security team's attention to where it matters most.
+
+---
+
 ## System Overview — Three-Plane Architecture
 
 Flowscope is one component of a three-plane governance system. Only the enforcement plane is built; the other two are designed and ready to wire in.
