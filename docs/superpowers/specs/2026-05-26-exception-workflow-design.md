@@ -34,7 +34,7 @@ Exceptions live in `.github/flowscope-exceptions.json` in each consuming repo. C
 ```json
 {
   "scope": "contents:write",
-  "status": "pending",
+  "status": "active",
   "justification": "TODO: describe why this exception is needed",
   "approved_by": "",
   "expires_at": "YYYY-MM-DD",
@@ -46,12 +46,14 @@ Exceptions live in `.github/flowscope-exceptions.json` in each consuming repo. C
 | Field | Required by policy engine | Purpose |
 |---|---|---|
 | `scope` | yes | Permission scope being excepted |
-| `status` | yes | `pending` (awaiting review) or `active` (approved) |
+| `status` | yes | Must be `active`; no other value is recognised |
 | `expires_at` | yes | ISO date; policy engine rejects expired entries |
 | `workflow` | yes (new) | Scopes the exception to a specific workflow file |
-| `justification` | no | Human-readable reason; filled by developer |
-| `approved_by` | no | Filled by security team on approval |
+| `justification` | no | Human-readable reason; filled by developer before review |
+| `approved_by` | no | Optional; security reviewer may fill before approving. The PR merge record and CODEOWNERS audit trail are the authoritative approval evidence |
 | `job_id` | no | Informational context for reviewer |
+
+`status: active` is set by the scaffold at creation time. The PR review and merge via CODEOWNERS is the governance gate — there is no separate post-merge activation step. The exception is live the moment the PR lands.
 
 ### Policy engine change
 
@@ -99,7 +101,7 @@ This draft PR adds a skeleton exception entry to `.github/flowscope-exceptions.j
 
 **Security team:** approval of this PR constitutes the formal exception grant.
 CODEOWNERS enforcement requires your review before merge.
-Once merged, flip `status` from `pending` to `active`.
+The exception is active immediately on merge — no further action required.
 ```
 
 ### Required permissions in consuming repo workflow
