@@ -101,6 +101,8 @@ The four rules are evaluated in order. Rules 1 and 2 return immediately — ther
 | 2 | `permissions: {}` (implicit full access) | `HARD_BLOCK` | Equivalent to write-all on GHA; returns immediately |
 | 3 | Workflow-level write scope + any unscoped job | `HARD_BLOCK` | Job-level override required for each job |
 | 4 | Agentic action + write scope + no observed baseline | `REQUIRES_REVIEW` | Non-blocking; flagged for CODEOWNERS-routed human review |
+| 5 | `pull_request_target` trigger + any write scope | `HARD_BLOCK` | Canonical fork-PR-poisoning attack vector |
+| 6 | `workflow_run` trigger + any write scope | `REQUIRES_REVIEW` | Chain inherits implicit secrets access; legitimate but warrants review |
 
 **Violation tiers:**
 - `HARD_BLOCK` — fails the check; resolved by fixing the workflow or registering a formal exception

@@ -76,6 +76,31 @@ def test_agentic_step_requires_review_does_not_fail_check():
     assert not result.has_hard_block()
 
 
+def test_pull_request_target_with_write_scope_hard_blocks():
+    # Rule 5: pull_request_target + write scope = canonical fork-PR-poisoning vector
+    result = analyze_workflow(FIXTURES / "pull_request_target_write.yml")
+    assert result.passed is False
+    assert result.has_hard_block()
+    assert any(v.scope == "pull_request_target" for v in result.violations)
+
+
+def test_pull_request_target_with_only_read_scopes_passes():
+    # Rule 5 only fires when there's a write scope; read-only is safe
+    result = analyze_workflow(FIXTURES / "pull_request_target_safe.yml")
+    assert result.passed is True
+    assert not result.has_hard_block()
+
+
+def test_workflow_run_with_write_scope_requires_review():
+    # Rule 6: workflow_run + write scope = non-blocking but warrants review
+    # (legitimate for deploy-after-CI; chain inherits implicit secrets access)
+    result = analyze_workflow(FIXTURES / "workflow_run_write.yml")
+    assert result.passed is True  # REQUIRES_REVIEW doesn't fail the check
+    assert result.requires_review()
+    assert not result.has_hard_block()
+    assert any(v.scope == "workflow_run" for v in result.violations)
+
+
 def test_workflow_path_preserved_in_result():
     fixture_path = FIXTURES / "clean_minimal.yml"
     result = analyze_workflow(fixture_path)
