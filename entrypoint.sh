@@ -26,51 +26,6 @@ fi
 # Print to stdout for CI logs
 echo "$OUTPUT"
 
-# Write a markdown summary to the Actions step summary panel.
-# This avoids the double-annotation problem that occurs when ::error:: commands
-# are emitted alongside GHA's built-in "Process completed with exit code 1" annotation.
-if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-    FLOWSCOPE_OUTPUT="$OUTPUT" python3 - <<'PYEOF'
-import json, os
-
-data = json.loads(os.environ["FLOWSCOPE_OUTPUT"])
-workspace = os.environ.get("GITHUB_WORKSPACE", "")
-wf = data.get("workflow_path", "")
-if workspace and wf.startswith(workspace):
-    wf = wf[len(workspace):].lstrip("/")
-
-passed = data.get("passed", True)
-violations = data.get("violations", [])
-
-status = "✅ Passed" if passed else "❌ Failed"
-summary_path = os.environ["GITHUB_STEP_SUMMARY"]
-
-tier_label = {
-    "hard_block":      "🔴 hard\_block",
-    "requires_review": "🟠 requires\_review",
-    "warning":         "🟡 warning",
-    "advisory":        "🔵 advisory",
-}
-
-with open(summary_path, "a") as f:
-    f.write(f"## flowscope — `{wf}`\n\n")
-    f.write(f"**{status}**")
-    if violations:
-        f.write(f" — {len(violations)} violation(s)\n\n")
-        f.write("| Tier | Message | Remediation |\n")
-        f.write("|------|---------|-------------|\n")
-        for v in violations:
-            tier = v.get("tier", "")
-            label = tier_label.get(tier, tier)
-            msg = v.get("message", "").replace("|", "\\|")
-            fix = v.get("remediation", "").replace("|", "\\|")
-            f.write(f"| {label} | {msg} | {fix} |\n")
-    else:
-        f.write("\n")
-    f.write("\n")
-PYEOF
-fi
-
 # Exception PR creation — opt-in, only when violations exist
 if [[ "$CREATE_EXCEPTION_PR" == "true" && "$EXIT_CODE" -ne 0 ]]; then
     WORKFLOW_STEM=$(basename "${WORKFLOW_FILE}" .yml)
