@@ -12,7 +12,6 @@ def _build_entry(violation: dict[str, Any], workflow: str) -> dict[str, Any]:
     return {
         "scope": violation["scope"],
         "justification": "TODO: describe why this exception is needed",
-        "approved_by": "",
         "expires_at": str(date.today() + timedelta(days=90)),
         "workflow": workflow,
         "job_id": violation.get("job_id"),

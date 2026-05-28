@@ -30,7 +30,9 @@ def test_scaffold_creates_entry_per_scoped_violation(tmp_path):
     assert entry["workflow"] == ".github/workflows/deploy.yml"
     assert entry["job_id"] == "deploy"
     assert entry["justification"] == "TODO: describe why this exception is needed"
-    assert entry["approved_by"] == ""
+    # approved_by and status fields are deliberately absent — the PR merge
+    # under CODEOWNERS gating is the authoritative approval record.
+    assert "approved_by" not in entry
     assert "status" not in entry
 
 

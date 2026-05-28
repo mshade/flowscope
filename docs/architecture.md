@@ -147,14 +147,13 @@ The scaffolded entry:
 {
   "scope": "contents",
   "justification": "TODO: describe why this exception is needed",
-  "approved_by": "",
   "expires_at": "2026-08-24",
   "workflow": ".github/workflows/build.yml",
   "job_id": "deploy"
 }
 ```
 
-No `status` field. CODEOWNERS-gated merge is the approval gate; expiry handles time-bounding. A `status: pending` field would require a second commit to activate the exception after merge — manual toil with no security benefit.
+No `status` field. No `approved_by` field. CODEOWNERS-gated merge is the approval gate; expiry handles time-bounding. Either field would require a second commit at review time — `status: pending → active` to activate the exception, or `approved_by: ""` to be filled in by the reviewer — adding manual toil that duplicates what the git merge record already proves under CODEOWNERS routing.
 
 ---
 
@@ -166,9 +165,11 @@ No `status` field. CODEOWNERS-gated merge is the approval gate; expiry handles t
 
 **Deterministic branch names.** `flowscope/exception-<stem>` reduces idempotency to a branch-existence check (`git ls-remote --exit-code`). No PR search, no state file, no race condition.
 
+**No `status` or `approved_by` fields in the exception schema.** Both would require a second commit at review time — `status: pending → active` to activate the exception, or `approved_by` to be filled by the reviewer. The PR merge under CODEOWNERS gating is the authoritative approval record: who merged it, when, and with whose review is all in the git history. A field on the JSON entry is at best a duplicate and at worst a second source of truth that drifts.
+
 **`REQUIRES_REVIEW` tier — non-blocking by design.** Agentic actions with write scope cannot be statically proven safe — the question is whether the action's behavior under that token is acceptable, which requires human judgment. A `HARD_BLOCK` would demand a code fix that may not exist; a `WARNING` would let it pass silently. `REQUIRES_REVIEW` sits between them: the check stays green (so it isn't bypassed via an exception entry that bundles it with HARD_BLOCK semantics) but emits a visible annotation. The actual gate is the CODEOWNERS routing on agentic workflow file patterns — the security team's PR approval is the recorded, audit-logged acknowledgment. No separate file, no second source of truth.
 
-**`ruamel.yaml` over PyYAML.** Comment-preserving parse tree retained for planned advisory rules: write scopes with no inline justification comment will emit an `ADVISORY` violation. PyYAML discards comments; switching later would require re-parsing all documents.
+**`ruamel.yaml` over PyYAML.** Comment-preserving parse tree retained for advisory rules: Rule 7 looks for inline `# flowscope:reason:` markers on high-risk scope lines, and a future advisory rule for generic write scopes can follow the same pattern. PyYAML discards comments; switching later would require re-parsing all documents.
 
 **Rules 1 and 2 return early.** When `write-all` or implicit full access is set, reporting job-level violations would be misleading — there are no job-level scopes to fix. Early return keeps the output focused on actionable items.
 

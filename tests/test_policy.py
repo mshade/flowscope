@@ -84,7 +84,6 @@ def test_registered_exception_suppresses_hard_block():
         {
             "scope": "write-all",
             "justification": "Legacy deploy job requires full token",
-            "approved_by": "platform-team",
             "expires_at": str(date(2099, 1, 1)),
         }
     ]
@@ -100,7 +99,6 @@ def test_expired_exception_does_not_suppress():
         {
             "scope": "write-all",
             "justification": "Old exception",
-            "approved_by": "platform-team",
             "expires_at": str(date(2020, 1, 1)),
         }
     ]
@@ -116,7 +114,6 @@ def test_exception_without_workflow_field_suppresses_any_workflow():
         {
             "scope": "write-all",
             "justification": "Repo-wide grant",
-            "approved_by": "platform-team",
             "expires_at": str(date(2099, 1, 1)),
         }
     ]
@@ -132,7 +129,6 @@ def test_exception_with_matching_workflow_suppresses():
         {
             "scope": "write-all",
             "justification": "Deploy needs full token",
-            "approved_by": "platform-team",
             "expires_at": str(date(2099, 1, 1)),
             "workflow": ".github/workflows/deploy.yml",
         }
@@ -151,7 +147,6 @@ def test_exception_with_nonmatching_workflow_does_not_suppress():
         {
             "scope": "write-all",
             "justification": "Deploy needs full token",
-            "approved_by": "platform-team",
             "expires_at": str(date(2099, 1, 1)),
             "workflow": ".github/workflows/deploy.yml",
         }

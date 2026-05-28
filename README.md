@@ -183,7 +183,6 @@ jobs:
   {
     "scope": "contents",
     "justification": "Deploy job pushes a release tag — write access required",
-    "approved_by": "security-team",
     "expires_at": "2027-01-01",
     "workflow": ".github/workflows/deploy.yml",
     "job_id": "release"
@@ -192,6 +191,8 @@ jobs:
 ```
 
 Each exception is scoped to a `(scope, workflow)` pair — an approval for one workflow does not silently suppress violations in another. Omit `workflow` for a repo-wide grant. Exceptions expire automatically on `expires_at`.
+
+No `approved_by` or `status` fields by design — the PR merge under CODEOWNERS gating is the authoritative approval record. A separate field would either need a second commit at review time (cumbersome) or duplicate what git history already proves.
 
 ### Consuming the check result
 
