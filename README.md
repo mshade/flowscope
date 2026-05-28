@@ -122,7 +122,12 @@ Combined with a [branch protection rule](https://docs.github.com/en/repositories
 
 ### Step 5 — Enable automatic exception PRs
 
-Set `create_exception_pr: "true"` on the action (requires `contents: write` and `pull-requests: write`). When flowscope blocks a PR, it automatically:
+Set `create_exception_pr: "true"` on the action. Two configuration requirements:
+
+1. The calling workflow needs `permissions: { contents: write, pull-requests: write }`.
+2. At the repo or org level, **Settings → Actions → General → Workflow permissions** must allow GitHub Actions to create and approve pull requests. This is off by default; without it, `gh pr create` fails with `GitHub Actions is not permitted to create or approve pull requests`.
+
+When flowscope blocks a PR, it automatically:
 
 1. Creates branch `flowscope/exception-<workflow-stem>` (deterministic — re-pushes are idempotent)
 2. Scaffolds `.github/flowscope-exceptions.json` with the blocked scopes pre-filled
