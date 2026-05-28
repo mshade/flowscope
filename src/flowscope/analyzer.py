@@ -27,11 +27,15 @@ def analyze_workflow(
         exceptions=exceptions,
     )
 
-    # Only HARD_BLOCK fails the check. REQUIRES_REVIEW surfaces as an annotation
-    # but does not gate merge — the human acknowledgment is recorded by the
-    # CODEOWNERS-routed PR approval on agentic workflow file patterns. The
-    # security team approving the PR is the persisted record of the review.
-    passed = not any(v.tier == ViolationTier.HARD_BLOCK for v in violations)
+    # HARD_BLOCK and REQUIRES_REVIEW both fail the check. They share a
+    # resolution mechanism (fix the workflow or register an exception,
+    # scaffolded by the auto-PR flow) but differ in messaging: HARD_BLOCK
+    # frames a clear misconfiguration; REQUIRES_REVIEW frames a judgment
+    # call where the reviewer decides whether the pattern is acceptable.
+    # Blocking is the safe default — non-blocking relies on CODEOWNERS being
+    # configured perfectly, and most orgs have imperfect coverage.
+    blocking = (ViolationTier.HARD_BLOCK, ViolationTier.REQUIRES_REVIEW)
+    passed = not any(v.tier in blocking for v in violations)
 
     return CheckResult(
         workflow_path=str(workflow_path),

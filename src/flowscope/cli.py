@@ -32,12 +32,13 @@ def _write_step_summary(output: dict, warn_only: bool = False) -> None:
     has_requires_review = any(v.get("tier") == "requires_review" for v in violations)
     has_advisory = any(v.get("tier") == "advisory" for v in violations)
 
-    if warn_only and has_hard_block:
-        status = "⚠️ Audit mode — would fail (hard block)"
+    blocks = has_hard_block or has_requires_review
+    if warn_only and blocks:
+        status = "⚠️ Audit mode — would fail"
     elif has_hard_block:
         status = "❌ Failed"
     elif has_requires_review:
-        status = "🟠 Review required (non-blocking)"
+        status = "🟠 Review required (blocking)"
     elif has_advisory:
         status = "ℹ️ Advisory (non-blocking)"
     else:
@@ -47,17 +48,19 @@ def _write_step_summary(output: dict, warn_only: bool = False) -> None:
         f.write(f"## flowscope — `{wf}`\n\n")
         if violations:
             f.write(f"**{status}** — {len(violations)} violation(s)\n\n")
-            if warn_only and has_hard_block:
+            if warn_only and blocks:
                 f.write(
-                    "> ⚠️ **Audit mode** (`--warn-only`): hard-block violations are "
+                    "> ⚠️ **Audit mode** (`--warn-only`): blocking violations are "
                     "present but not failing the check. Enable full enforcement "
                     "(remove `--warn-only`) once these are resolved.\n\n"
                 )
             elif has_requires_review and not has_hard_block:
                 f.write(
-                    "> 🟠 **Review required** — the check is non-blocking, but this PR "
-                    "should be reviewed by a CODEOWNER on the agentic workflow file "
-                    "patterns. The PR approval is the recorded human acknowledgment.\n\n"
+                    "> 🟠 **Review required** — this finding blocks the check until "
+                    "a security/platform team reviewer decides whether to accept the "
+                    "risk (register an exception via the auto-PR) or whether the "
+                    "workflow should be changed. Same resolution mechanism as a hard "
+                    "block, but framed as a judgment call rather than a fix.\n\n"
                 )
             f.write("| Tier | Message | Remediation |\n")
             f.write("|------|---------|-------------|\n")

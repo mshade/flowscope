@@ -65,13 +65,13 @@ def test_result_serializes_to_json():
     assert output["passed"] is False
 
 
-def test_agentic_step_requires_review_does_not_fail_check():
+def test_agentic_step_requires_review_fails_check():
     # agentic_scoped.yml: job-level permissions (no Rule 3), agentic action, no baseline
-    # → only violation should be REQUIRES_REVIEW, which surfaces but does NOT block.
-    # The PR-level CODEOWNERS approval on agentic workflow file patterns is the
-    # recorded human acknowledgment; flowscope's job is to flag, not gate.
+    # → only violation should be REQUIRES_REVIEW, which blocks. Same resolution
+    # mechanism as HARD_BLOCK (fix or exception) but the reviewer is being asked
+    # to make a judgment call rather than fix a clear misconfiguration.
     result = analyze_workflow(FIXTURES / "agentic_scoped.yml")
-    assert result.passed is True
+    assert result.passed is False
     assert result.requires_review()
     assert not result.has_hard_block()
 
@@ -91,11 +91,11 @@ def test_pull_request_target_with_only_read_scopes_passes():
     assert not result.has_hard_block()
 
 
-def test_workflow_run_with_write_scope_requires_review():
-    # Rule 6: workflow_run + write scope = non-blocking but warrants review
-    # (legitimate for deploy-after-CI; chain inherits implicit secrets access)
+def test_workflow_run_with_write_scope_requires_review_fails_check():
+    # Rule 6: workflow_run + write scope blocks. Legitimate uses (deploy-after-CI)
+    # are cleared via the exception mechanism after security-team judgment.
     result = analyze_workflow(FIXTURES / "workflow_run_write.yml")
-    assert result.passed is True  # REQUIRES_REVIEW doesn't fail the check
+    assert result.passed is False
     assert result.requires_review()
     assert not result.has_hard_block()
     assert any(v.scope == "workflow_run" for v in result.violations)

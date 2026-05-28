@@ -85,7 +85,7 @@ flowchart LR
 
 **`policy.py`** evaluates four rules in order and returns a flat `list[Violation]`. Each violation carries a tier, the affected scope, file path, line number, and a remediation hint.
 
-**`analyzer.py`** is the thin coordinator: loads YAML once, passes the raw document to both parser and policy evaluator, assembles `CheckResult`. The `passed` field is `False` only if any `HARD_BLOCK` violation is present — `REQUIRES_REVIEW` surfaces in annotations but does not gate merge, because the recorded human acknowledgment lives in the PR approval log rather than in a separate exception file.
+**`analyzer.py`** is the thin coordinator: loads YAML once, passes the raw document to both parser and policy evaluator, assembles `CheckResult`. The `passed` field is `False` if any `HARD_BLOCK` or `REQUIRES_REVIEW` violation is present. The two blocking tiers share a resolution mechanism (fix or exception) but differ in communication — the distinction guides the reviewer rather than gating differently.
 
 **`cli.py`** serializes `CheckResult` to JSON on stdout and exits with code 0 (pass) or 1 (fail). The GitHub Action captures this output before propagating the exit code so `$GITHUB_OUTPUT` is always written even when violations are found.
 
@@ -100,14 +100,14 @@ The four rules are evaluated in order. Rules 1 and 2 return immediately — ther
 | 1 | `permissions: write-all` | `HARD_BLOCK` | Returns immediately |
 | 2 | `permissions: {}` (implicit full access) | `HARD_BLOCK` | Equivalent to write-all on GHA; returns immediately |
 | 3 | Workflow-level write scope + any unscoped job | `HARD_BLOCK` | Job-level override required for each job |
-| 4 | Agentic action + write scope + no observed baseline | `REQUIRES_REVIEW` | Non-blocking; flagged for CODEOWNERS-routed human review |
+| 4 | Agentic action + write scope + no observed baseline | `REQUIRES_REVIEW` | Blocks; cleared by exception (auto-scaffolded) or fix |
 | 5 | `pull_request_target` trigger + any write scope | `HARD_BLOCK` | Canonical fork-PR-poisoning attack vector |
-| 6 | `workflow_run` trigger + any write scope | `REQUIRES_REVIEW` | Chain inherits implicit secrets access; legitimate but warrants review |
+| 6 | `workflow_run` trigger + any write scope | `REQUIRES_REVIEW` | Blocks; chain inherits implicit secrets access |
 | 7 | High-risk scope write (`actions`, `id-token`, `packages`, `attestations`) without inline justification | `ADVISORY` | Suppressed by `# flowscope:reason: <why>` on the scope line |
 
 **Violation tiers:**
 - `HARD_BLOCK` — fails the check; resolved by fixing the workflow or registering a formal exception
-- `REQUIRES_REVIEW` — does **not** fail the check; surfaces as an annotation. The recorded human acknowledgment is the CODEOWNERS-gated PR approval on agentic workflow file patterns. Code cannot statically prove an agentic action with write scope is safe; the right gate is a human reviewer of the PR, not a separate exception file.
+- `REQUIRES_REVIEW` — fails the check. Shares the resolution mechanism with `HARD_BLOCK` (fix or exception, scaffolded by the auto-PR feature) but the messaging frames a judgment call rather than a clear misconfiguration. The reviewer decides whether the pattern (e.g. an agentic action with write scope) is acceptable; if yes, an exception entry records the decision.
 - `WARNING` — defined, not yet emitted by any rule; reserved for observation-plane outputs (e.g. declared scope exceeds observed usage)
 - `ADVISORY` — non-blocking soft signal. Currently emitted by Rule 7 for high-risk scopes without an inline justification comment
 
@@ -167,7 +167,7 @@ No `status` field. No `approved_by` field. CODEOWNERS-gated merge is the approva
 
 **No `status` or `approved_by` fields in the exception schema.** Both would require a second commit at review time — `status: pending → active` to activate the exception, or `approved_by` to be filled by the reviewer. The PR merge under CODEOWNERS gating is the authoritative approval record: who merged it, when, and with whose review is all in the git history. A field on the JSON entry is at best a duplicate and at worst a second source of truth that drifts.
 
-**`REQUIRES_REVIEW` tier — non-blocking by design.** Agentic actions with write scope cannot be statically proven safe — the question is whether the action's behavior under that token is acceptable, which requires human judgment. A `HARD_BLOCK` would demand a code fix that may not exist; a `WARNING` would let it pass silently. `REQUIRES_REVIEW` sits between them: the check stays green (so it isn't bypassed via an exception entry that bundles it with HARD_BLOCK semantics) but emits a visible annotation. The actual gate is the CODEOWNERS routing on agentic workflow file patterns — the security team's PR approval is the recorded, audit-logged acknowledgment. No separate file, no second source of truth.
+**`REQUIRES_REVIEW` tier — blocking, semantically distinct.** Agentic actions with write scope cannot be statically proven safe — the question is whether the action's behavior under that token is acceptable, which requires human judgment. The tier blocks the check (same exit semantics as `HARD_BLOCK`) but uses different messaging and remediation framing: the reviewer is being asked to make a judgment call, not fix a clear misconfiguration. An earlier design treated `REQUIRES_REVIEW` as non-blocking on the theory that the CODEOWNERS-routed PR approval was the gate; that was reconsidered because it relies on CODEOWNERS being perfectly configured (pattern coverage matching every agentic action file, branch protection requiring CODEOWNERS approval, no admin bypass). Most orgs have imperfect CODEOWNERS coverage, so blocking is the safer default. The shared resolution mechanism with `HARD_BLOCK` (fix or exception, scaffolded by `create_exception_pr: true`) means there's no friction cost — the exception PR's CODEOWNERS-gated merge IS the recorded acknowledgment.
 
 **`ruamel.yaml` over PyYAML.** Comment-preserving parse tree retained for advisory rules: Rule 7 looks for inline `# flowscope:reason:` markers on high-risk scope lines, and a future advisory rule for generic write scopes can follow the same pattern. PyYAML discards comments; switching later would require re-parsing all documents.
 

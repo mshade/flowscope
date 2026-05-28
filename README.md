@@ -12,14 +12,14 @@ Flowscope is the enforcement plane of a larger [Workflow Permission Governance S
 | `permissions: {}` (implicit full access) | Hard block | Fails the check |
 | Workflow-level write scope with any unscoped job | Hard block | Fails the check |
 | `pull_request_target` trigger + any write scope | Hard block | Fails the check (fork-PR-poisoning vector) |
-| Agentic action (e.g. `claude-code-action`) with write scope and no observed baseline | Requires review | Non-blocking annotation |
-| `workflow_run` trigger + any write scope | Requires review | Non-blocking annotation |
+| Agentic action (e.g. `claude-code-action`) with write scope and no observed baseline | Requires review | Fails the check; cleared by exception (auto-scaffolded) or fix |
+| `workflow_run` trigger + any write scope | Requires review | Fails the check; cleared by exception (auto-scaffolded) or fix |
 | High-risk scope (`actions`, `id-token`, `packages`, `attestations`) without inline justification | Advisory | Soft notice; suppressed by `# flowscope:reason: <why>` on the scope line |
 
 **Tier resolution paths:**
 
-- **Hard block** — fix the workflow or register an exception in `.github/flowscope-exceptions.json` (security team approves via CODEOWNERS).
-- **Requires review** — recorded by the CODEOWNERS-routed PR approval on agentic/high-risk workflow file patterns. *This tier assumes the deployment-level CODEOWNERS controls are in place* (see [Step 4](#step-4--route-workflow-and-exception-changes-through-codeowners)); without them, REQUIRES_REVIEW is an unblocked annotation. flowscope's role is to point the reviewer at the specific risk pattern within a diff CODEOWNERS already routed to them.
+- **Hard block** — fix the workflow or register an exception in `.github/flowscope-exceptions.json` (security team approves the exception PR via CODEOWNERS).
+- **Requires review** — blocks the check. Same resolution mechanism as hard block (fix or exception), but the framing is different: the reviewer is being asked to make an explicit judgment about whether the pattern is acceptable, not to fix a clear misconfiguration. Blocking is deliberate — relying on CODEOWNERS routing to gate the merge is fragile (pattern coverage gaps, admin bypass, branch protection misconfig). Auto-PR scaffolding (`create_exception_pr: true`) keeps the exception path low-friction.
 - **Advisory** — inline `# flowscope:reason: <why>` comment on the scope line, or remove the scope.
 - **Warning** — defined but currently unemitted; reserved for observation-plane signals (declared scope exceeds observed runtime usage).
 
