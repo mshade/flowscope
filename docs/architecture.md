@@ -191,6 +191,24 @@ No `status` field. No `approved_by` field. CODEOWNERS-gated merge is the approva
 
 ---
 
+## Rollout: Warn-Only to Enforcement
+
+`--warn-only` and the observation plane are designed to work together as a deliberate transition program from no enforcement to full enforcement:
+
+1. **Deploy warn-only org-wide.** flowscope wired as a required workflow with `warn_only: "true"` and `registry_url` pointed at the observation plane endpoint. Every PR is scanned, no PR is blocked. Coverage starts immediately across every repo.
+
+2. **Let telemetry populate.** As PRs land, the registry receives results. Within a few weeks of normal PR activity, the dashboard has a representative picture: which repos have coverage, which rules trigger most often, which teams own the would-blockers.
+
+3. **Triage the would-block backlog before flipping any switch.** Walk the dashboard: real misconfigurations get fixed via normal PRs; legitimate patterns get exceptions registered (auto-PR scaffolded); over-broad rules get refined. The backlog shrinks while warn-only stays in place — no one is blocked, but the path to enforcement is being cleared.
+
+4. **Enforce in waves.** Flip blocking on for low-risk repo groups first — internal tooling, scratch repos, low blast radius. The remaining warn-only fleet still produces dashboard data for comparison. If the enforced groups' findings trend down without surprise breakage, expand the boundary.
+
+5. **Make blocking the org default.** Once high-volume repos enforce cleanly, set blocking as the org-wide default. Warn-only becomes the opt-in for newly-acquired repos or repos under active remediation — not the standard posture.
+
+Without telemetry, the warn-only → blocking transition is a leap of faith taken on someone's gut feel. With it, every phase has measurable exit criteria: would-block count below threshold, exception backlog drained, no rule firing more than expected. That's the difference between a security program with deadlines and a security program with deferrals.
+
+---
+
 ## What's Next
 
 The enforcement plane is production-ready as a standalone CI gate. The two planned planes connect to it via inputs already wired into the CLI:
