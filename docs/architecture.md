@@ -4,7 +4,7 @@
 
 GitHub Actions workflows run with a `GITHUB_TOKEN` scoped at the workflow or job level. Misconfigured permissions — `permissions: write-all` etc, implicit full access from an empty `permissions: {}` block, or workflow-level write scopes that bleed into unscoped jobs — create unnecessary blast radius on every CI run. Developers declare more than required to get past immediate issues, and permissions are never examined again. Agentic steps (AI coding agents making API calls under the job token) amplify the risk further: a write-scoped token in an agentic job can be exploited or misused in ways that pure automation cannot.
 
-The goal: enable least-privilege permissions as a structural gate in CI. Create a framework for auditing existing workflow permissions.
+The goal: enable least-privilege permissions as a structural gate in CI. Create a framework for auditing existing workflow permissions. With full implementation, leverage flywheel effect to build database of baseline permission usage and acceptable risk, so the system becomes self-improving.
 
 ---
 
@@ -41,6 +41,8 @@ graph TB
   subgraph observation["Observation Plane (planned)"]
     hook["runner hook\npost-job"]
     baseline[("baseline\nstore")]
+    telemetry[("enforcement\ntelemetry")]
+    dash["rollout\ndashboard"]
   end
   subgraph policy["Policy Plane (planned)"]
     registry[("exception\nregistry")]
@@ -52,11 +54,25 @@ graph TB
   baseline -->|"observed usage"| fs
   registry -->|"approved exceptions"| fs
   fs -->|"CheckResult JSON"| ci["CI gate\nexit 0 / 1"]
+  fs -->|"POST result"| telemetry
+  baseline --> dash
+  telemetry --> dash
 ```
 
 **Enforcement Plane (built):** Static analysis gate running in CI. Inspects workflow YAML before merge. Classifies violations by tier and emits structured JSON with an exit code. Accepts an observed baseline and an exception registry as optional inputs.
 
-**Observation Plane (planned):** Post-job runner hooks that record which token scopes were actually exercised at runtime. Output is a baseline JSON file fed back into the enforcement plane — enabling the policy engine to distinguish "this job requests write scope and uses it" from "this job requests write scope but never touches it."
+**Observation Plane (planned):** Two data flows feeding a central store and rollout dashboard.
+
+*Runtime token observation.* Post-job runner hooks record which token scopes the `GITHUB_TOKEN` actually exercised at runtime. Output is baseline JSON the enforcement plane consumes to distinguish "this job declares write scope and uses it" from "this job declares write scope but never touches it." Required for Rule 4 to clear without manual review and for the WARNING tier (declared exceeds observed) to start emitting.
+
+*Enforcement telemetry.* Each flowscope run POSTs its check result to a central endpoint (`FLOWSCOPE_REGISTRY_URL`, already wired into the CLI and action). The receiving service aggregates results into a rollout dashboard answering operational questions:
+
+- **Coverage.** Which repos have been scanned, when, by which flowscope version. Surfaces gaps: "12 repos in the org have never been scanned"; "47 repos haven't been scanned in 30 days." Without this, the org doesn't know how complete its own enforcement footprint is.
+- **Would-block under enforcement.** For repos running in `--warn-only` mode: count of would-be-blocked findings by tier and by rule, by repo and by team. Answers the rollout question "if I flip the switch from warn-only to blocking today, how many repos break and which teams own them?"
+- **Trends over time.** Violation counts per tier per week as enforcement ramps; exception registrations vs. expirations; mean time to resolution for blocking findings. Demonstrates whether the program is reducing risk or just generating noise.
+- **Per-team rollup.** Aggregated by the CODEOWNERS routing already configured on workflow files — security team sees what's routed to security, platform sees platform. The same routing that gates merge gates the dashboard view.
+
+This is what makes the gradual `--warn-only` rollout deliberate rather than indefinite. Without the dashboard, audit mode is just "don't fail anyone yet" and there's no measure of when it's safe to enforce. With it, the transition is a measurable, time-boxed program.
 
 **Policy Plane (planned):** Centralized baseline store and exception registry with audit trail. Aggregates data across repos; feeds the enforcement plane with historical usage signals and security-team-approved exceptions.
 
@@ -181,8 +197,11 @@ The enforcement plane is production-ready as a standalone CI gate. The two plann
 
 **Existing workflow coverage — the blind spot today.** The CI gate only fires when a workflow file changes. Workflows that predate flowscope adoption, or that were approved before a rule was added, run indefinitely without review. The observation plane is the fix: because it records actual token usage at runtime, it generates baseline data for every workflow that runs — not just those being modified. That baseline can be periodically compared against declared scopes in a scheduled scan (flowscope already accepts a file path, not just a PR context), surfacing overprovisioning that has been sitting in the repo for months.
 
-**Observation plane:** A post-job runner hook records which API endpoints the `GITHUB_TOKEN` called during the job. Output is a `baseline.json` passed to `flowscope --baseline`. This unlocks Rule 4 for any agentic action — not just those in the registry — and enables future rules that downgrade violations when observed usage is narrower than declared scope.
+**Observation plane:** Two integrations feeding a central store and dashboard:
 
-**Policy plane:** A baseline store aggregates observed usage across repos. An exception registry with audit trail replaces the per-repo JSON files for organizations that want centralized governance. Both feed the enforcement plane through the same `--baseline` and `--exceptions` interfaces.
+1. *Runtime token observation* — post-job runner hook records which API endpoints the `GITHUB_TOKEN` called during the job. Output is `baseline.json` passed to `flowscope --baseline`. Unlocks Rule 4 for any agentic action (not just those in the registry) and enables the WARNING tier (declared scope exceeds observed usage). As actions are observed, permissions usage is tracked and can inform `flowscope` decisions, which allows replacing static rules with empirical usage patterns — over-permissioning caught with data, not just static intuition.
+2. *Enforcement telemetry* — `FLOWSCOPE_REGISTRY_URL` (already wired into the CLI and action) POSTs each check result to a central endpoint. The receiving service aggregates into a rollout dashboard: coverage (which repos scanned and when), would-block counts under audit mode, exception lifecycle, trend lines. Makes `--warn-only` rollout measurable: the security team can answer "if we flip enforcement on today, what breaks?" before doing it.
+
+**Policy plane:** A baseline store aggregates observed usage across repos and known actions. An exception registry with audit trail replaces the per-repo JSON files for organizations that want centralized governance. Both feed the enforcement plane through the same `--baseline` and `--exceptions` interfaces.
 
 **`WARNING` tier:** Defined in `ViolationTier`, not yet emitted by any rule. Candidate use: declared write scopes that the observation plane has never seen exercised at runtime — broader than what's actually used.
