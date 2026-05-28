@@ -57,4 +57,9 @@ runs:
         INPUT_CREATE_EXCEPTION_PR: ${{ inputs.create_exception_pr }}
         INPUT_WARN_ONLY: ${{ inputs.warn_only }}
         FLOWSCOPE_REGISTRY_URL: ${{ inputs.registry_url }}
+        # gh CLI inside entrypoint.sh needs an explicit token. github.token
+        # carries the permissions granted by the calling workflow; if
+        # create_exception_pr is true, the caller must have granted
+        # contents: write and pull-requests: write.
+        GH_TOKEN: ${{ github.token }}
       run: "${{ github.action_path }}/entrypoint.sh"
